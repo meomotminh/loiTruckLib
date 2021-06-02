@@ -23,6 +23,13 @@ String dic_req_str;
 String dic_res_str;
 
 
+// Calculate COB_ID
+__u16 prepare_ID(__u16 ID_req){
+    __u16 node_ID = ID_req & 0x07f;
+    return (node_ID | 0x580);
+}
+
+// Util func to assign arr
 void assign_arr(__u8 data[8],__u8 byte1, __u8 byte2,__u8 byte3,__u8 byte4,__u8 byte5,__u8 byte6,__u8 byte7,__u8 byte8)
 {
     data[0] = byte1;
@@ -35,6 +42,7 @@ void assign_arr(__u8 data[8],__u8 byte1, __u8 byte2,__u8 byte3,__u8 byte4,__u8 b
     data[7] = byte8;
 }
 
+// display CAN Frame on Arduino IDE
 void display_CAN_Frame(can_frame _toDisplay)
 {   
     Serial.println("ID \t DLC \t Data");
@@ -190,7 +198,7 @@ can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
         temp = create_frame_from_str(tempstr);
     } else {
         assign_arr(data, 0x43, _toGet.data[1], _toGet.data[2], _toGet.data[3], 0x00, 0x00, 0x00, 0x00); // all bytes count
-        temp = create_CAN_frame(0x5C1, 8, data);
+        temp = create_CAN_frame(prepare_ID(_toGet.can_ID), 8, data); // NOT YET TEST
     }
 
     return temp;

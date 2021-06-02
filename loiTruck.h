@@ -34,6 +34,7 @@ can_frame create_CAN_frame(__u32 can_id, __u8 can_dlc, __u8 data[8]);
 String create_str_from_frame(can_frame _toConvert);
 can_frame create_frame_from_str(String _toConvert);
 void display_CAN_Frame(can_frame _toDisplay);
+__u16 prepare_ID(__u16 ID_req);
 
 
 enum RUN_MODE {
