@@ -35,13 +35,22 @@ String create_str_from_frame(can_frame _toConvert);
 can_frame create_frame_from_str(String _toConvert);
 void display_CAN_Frame(can_frame _toDisplay);
 __u16 prepare_ID(__u16 ID_req);
+__u8 prepare_Command_ID(can_frame req, bool end_msg);
 
 
 enum RUN_MODE {
-    MODE_HAPPY,
-    MODE_NORMAL,
-    MODE_UNHAPPY,
-    MODE_IGNORE
+    MODE_HAPPY, // richtig anwort
+    MODE_ADT,   // negativ anwort (0x80)
+    //MODE_NORMAL, // 50 50
+    MODE_UNHAPPY, // immer falsch
+    MODE_IGNORE // nicht 
+};
+
+struct answer {
+    __u8 data0;
+    __u8 data1;
+    __u8 data2;
+    __u8 data3;
 };
 
 
@@ -62,6 +71,17 @@ public:
 
     String segmented_res_Fahrzeug_Name[5];
 
+
+    // class DATA
+    __u8 loiTruck_Seri0;
+    __u8 loiTruck_Seri1;
+    __u8 loiTruck_Seri2;
+    __u8 loiTruck_Seri3;
+
+    __u8 loiTruck_Zeit0;
+    __u8 loiTruck_Zeit1;
+    
+
     enum ERROR {
         ERROR_OK = 0,
         ERROR_OVR8 = 1,
@@ -71,6 +91,16 @@ public:
     // Constructor
     LOITRUCK(RUN_MODE runMode) {
         _runMode = runMode;
+        
+        // assign Seri
+        loiTruck_Seri0 = Seri0_HAPPY;
+        loiTruck_Seri1 = Seri1_HAPPY;
+        loiTruck_Seri2 = Seri2_HAPPY;
+        loiTruck_Seri3 = Seri3_HAPPY;
+
+        // assign Zeit
+        loiTruck_Zeit0 = zeit0;
+        loiTruck_Zeit1 = zeit1;
     };
 
     // FUNCTION
@@ -84,13 +114,19 @@ public:
     void create_CAN_Expedited_map();
     void create_CAN_Segmented_map();
     bool check_Segmented(can_frame _toTest);
+    
     can_frame get_Segmented_Response();
     can_frame get_Expedited_Response(can_frame _toGet);
+    
     void create_segmented_res_Fahrzeug_Name();
     void set_expecting_Segmented_Req(int count);
     void initial_Segmented_Transmit(can_frame receive_frame);
     void finalise_Segmented_Transmit();
     
+    bool actuator(can_frame req_frame);
+    answer prepare_Answer(can_frame req);
+
+
 //private:
     // serien nummer 11_111_111
     enum SERIENUMMER : uint8_t {
@@ -105,7 +141,7 @@ public:
         Seri3_UNHAPPY = 0x01
     };
 
-
+   
     // produktion nummer 22_222_222
     enum PRODUKTION_NUMMER : uint8_t {
         produk0 = 0x8E,

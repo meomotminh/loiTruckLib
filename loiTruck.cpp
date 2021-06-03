@@ -17,16 +17,122 @@
 //std::vector<std::vector<__u8>> res_arr; 
 
 
-
 // Global String
 String dic_req_str;
 String dic_res_str;
 
 
 // Calculate COB_ID
-__u16 prepare_ID(__u16 ID_req){
+__u16 prepare_ID(__u16 ID_req)
+{
     __u16 node_ID = ID_req & 0x07f;
     return (node_ID | 0x580);
+}
+
+// calculate Command_ID
+__u8 prepare_Command_ID(can_frame req, bool end_msg)
+{
+    __u8 command_ID = req.data[0] & 0xf0;  // filter out n,e,struct MyStruct
+    __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
+    __u8 subindex_ID = req.data[3];
+
+
+    switch (command_ID) {
+        case 0x20: // initiate domain download
+            if (index_ID == 0x2020 && subindex_ID == 0x01)
+            {
+                command_ID = 0x80; // ABORT
+            } else {
+                command_ID = 0x60;  // Server reply
+            }            
+            break;
+        case 0x00:  // download domain segment toggle = 0
+            command_ID |= 0x20;  // or to remain toggle bit
+            break;
+        case 0x01:  // download domain segment toggle = 1
+            command_ID |= 0x20;  // or to remain toggle bit
+        case 0x40:  // initiate domain upload
+            command_ID |= 0x03;  // n = 0; e = s = 1
+            break;        
+        case 0x60:  // upload domain segment with toggle bit = 0
+            if (end_msg) {command_ID = 0x01;} else {command_ID = 0x00;}
+            break;
+        case 0x70:  // upload domain segment with toggle bit = 1
+            if (end_msg) {command_ID = 0x11;} else {command_ID = 0x10;}
+            break;
+        case 0xc0:  // initiate block download
+            command_ID = 0xA0;
+            break;
+        default : // Unknown
+            command_ID = 0x00;
+            break;
+    }
+
+    return command_ID;
+}
+
+answer LOITRUCK::prepare_Answer(can_frame req)
+{
+    answer to_Return;
+
+    __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
+    __u8 subindex_ID = req.data[3];
+    __u8 command_id = req.data[0];
+
+    
+    // DEFAULT VALUE
+    to_Return.data0 = 0x00;
+    to_Return.data1 = 0x00;
+    to_Return.data2 = 0x00;
+    to_Return.data3 = 0x00;
+    // SWITCH FOR INDEX + SUBINDEX
+    switch (index_ID){
+        case 0x2002: // Fahrzeug info   
+            if (subindex_ID == 0x01 && command_id == 0x40) // Read Seri Nummer                       
+            {
+                to_Return.data0 = this->loiTruck_Seri0;
+                to_Return.data1 = this->loiTruck_Seri1;
+                to_Return.data2 = this->loiTruck_Seri2;
+                to_Return.data3 = this->loiTruck_Seri3;
+            }
+            break;
+        case 0x2020: // Betriebszeit
+            if (subindex_ID == 0x01 && command_id == 0x40) // Read Seri Nummer
+            {
+                to_Return.data0 = this->loiTruck_Zeit0;
+                to_Return.data1 = this->loiTruck_Zeit1;
+                to_Return.data2 = 0x00;
+                to_Return.data3 = 0x00;
+            } else {
+                
+            }                        
+            break;
+    }
+    return to_Return;
+}
+
+bool LOITRUCK::actuator(can_frame req_frame)
+{
+    __u8 command_id = req_frame.data[0];
+    
+    // write serial nummer
+    if (command_id == 0x23 && req_frame.data[1] == 0x02 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x01)
+    {   
+        Serial.println("Write Seri");
+        this->loiTruck_Seri0 = req_frame.data[4];
+        this->loiTruck_Seri1 = req_frame.data[5];
+        this->loiTruck_Seri2 = req_frame.data[6];
+        this->loiTruck_Seri3 = req_frame.data[7];        
+    } 
+    // write betrieb zeit
+    else if (command_id == 0x2b && req_frame.data[1] == 0x20 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x01)
+    {   
+        Serial.println("Write zeit");
+        this->loiTruck_Zeit0 = req_frame.data[4];
+        this->loiTruck_Zeit1 = req_frame.data[5];        
+    }
+
+    return true;
 }
 
 // Util func to assign arr
@@ -187,7 +293,10 @@ can_frame LOITRUCK::get_Segmented_Response()
 can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
 {
     String tempstr = create_str_from_frame(_toGet);
-    can_frame temp;
+    can_frame temp;    
+    __u8 test_command_ID = _toGet.data[0];
+    bool end_msg;
+    answer anwort;
 
     std::map<String,String>::iterator it = this->CAN_Expedited_Map.find(tempstr);
     __u8 data[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -197,8 +306,15 @@ can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
         tempstr = it->second;
         temp = create_frame_from_str(tempstr);
     } else {
-        assign_arr(data, 0x43, _toGet.data[1], _toGet.data[2], _toGet.data[3], 0x00, 0x00, 0x00, 0x00); // all bytes count
-        temp = create_CAN_frame(prepare_ID(_toGet.can_ID), 8, data); // NOT YET TEST
+        // Test prepare command ID
+        if ((test_command_ID == 0x60 || test_command_ID == 0x70) && this->count_segmented == 4){end_msg = true;} else {end_msg = false;}
+
+        // actuator if needed
+        this->actuator(_toGet);
+        anwort = this->prepare_Answer(_toGet);
+        
+        assign_arr(data, prepare_Command_ID(_toGet, end_msg), _toGet.data[1], _toGet.data[2], _toGet.data[3], anwort.data0, anwort.data1, anwort.data2, anwort.data3); // all bytes count
+        temp = create_CAN_frame(prepare_ID(_toGet.can_id), 8, data); // NOT YET TEST
     }
 
     return temp;
@@ -242,15 +358,17 @@ int LOITRUCK::create_req_res_arr()
     std::vector<__u8> inner_res;
     std::vector<std::vector<__u8>>::const_iterator it;
     std::vector<__u8>::const_iterator it2;
-    
-    // SERIENNUMMER    
+    __u8 data_req_1[8];
+    __u8 data_res_1[8];
+    // SERIENNUMMER    NOT RO
+/*
     __u8 data_req_1[] = {0x40, 0x02, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00};
     __u8 data_res_1[] = {0x43, 0x02, 0x20, 0x01, Seri0_HAPPY, Seri1_HAPPY, Seri2_HAPPY, Seri3_HAPPY};
 
     inner_req.clear(); inner_res.clear();
     inner_req.reserve(8);inner_req.assign(data_req_1,data_req_1+8); inner_res.reserve(8);inner_res.assign(data_res_1,data_res_1+8);
     this->req_arr.push_back(inner_req);this->res_arr.push_back(inner_res);
-    
+*/   
   
     
     // -------------------- SW MATERIAL NUMMER 2000-------------------------
@@ -278,13 +396,14 @@ int LOITRUCK::create_req_res_arr()
     inner_req.reserve(8);inner_req.assign(data_req_1,data_req_1+8); inner_res.reserve(8);inner_res.assign(data_res_1,data_res_1+8);
     this->req_arr.push_back(inner_req);this->res_arr.push_back(inner_res);
 
+/* NOT RO
     // -------------------- BETRIEBSZEIT U16 STUNDEN 2020-------------------------
-    assign_arr(data_req_1, 0x40, 0x02, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00);
-    assign_arr(data_res_1, 0x43, 0x02, 0x20, 0x02, zeit0, zeit1, 0x00, 0x00);
+    assign_arr(data_req_1, 0x40, 0x20, 0x20, 0x01, 0x00, 0x00, 0x00, 0x00);
+    assign_arr(data_res_1, 0x43, 0x20, 0x20, 0x01, zeit0, zeit1, 0x00, 0x00);
     inner_req.clear(); inner_res.clear();
     inner_req.reserve(8);inner_req.assign(data_req_1,data_req_1+8); inner_res.reserve(8);inner_res.assign(data_res_1,data_res_1+8);
     this->req_arr.push_back(inner_req);this->res_arr.push_back(inner_res);  
-
+*/
 
     // -------------------- BETRIEBSZEIT U16 HUNDERTMS 2020-------------------------
     assign_arr(data_req_1, 0x40, 0x20, 0x20, 0x02, 0x00, 0x00, 0x00, 0x00);
@@ -426,7 +545,7 @@ int LOITRUCK::create_req_res_arr()
     this->req_arr.push_back(inner_req);this->res_arr.push_back(inner_res);
     inner_req.clear(); inner_res.clear();
     
-
+/*
     // -------------------- AUSROLLBREMSE MITGÄNGER 2105 SUBINX 02-------------------------
     assign_arr(data_req_1, 0x40, 0x05, 0x21, 0x02, 0x00, 0x00, 0x00, 0x00 );
     assign_arr(data_res_1, 0x4B, 0x05, 0x21, 0x02, bremse_fahr0_by_user, 0x00, 0x00, 0x00 );
@@ -756,11 +875,11 @@ int LOITRUCK::create_req_res_arr()
     assign_arr(data_req_1, 0x40, 0x15, 0x21, 0x06, 0x00, 0x00, 0x00, 0x00 );
     assign_arr(data_res_1, 0x4B, 0x15, 0x21, 0x06, bremse_fahr1_by_user, 0x00, 0x00, 0x00 );
 
-    inner_req.reserve(8);inner_req.assign(data_req_1,data_req_1+8); inner_res.reserve(8);inner_res.assign(data_res_1,data_res_1+8);
+    inner_req.reserve(8);inner_req.assign(data_req_1,data_req_1+8);  inner_res.reserve(8);inner_res.assign(data_res_1,data_res_1+8);
     this->req_arr.push_back(inner_req);this->res_arr.push_back(inner_res);
     inner_req.clear(); inner_res.clear();
     
-/*
+
     // -------------------- MAXIMALGEGSCHWINDIGKEIT ANTRIEBSRICHTUNG IM FP2 2118 SUBINDEX 2-------------------------
     assign_arr(data_req_1, 0x40, 0x18, 0x21, 0x02, 0x00, 0x00, 0x00, 0x00 );
     assign_arr(data_res_1, 0x4B, 0x18, 0x21, 0x02, antrieb_speed_fahr1_0, 0x00, 0x00, 0x00 );
@@ -1391,7 +1510,7 @@ String create_str(std::vector<__u8> data, __u16 can_id, int can_dlc)
   String s;
   std::vector<__u8>::const_iterator it2;
   s.reserve(25);
-
+  
   s += String(can_id, HEX) + " ";
 
   for (it2 = data.begin(); it2 != data.end(); it2++)
@@ -1408,9 +1527,13 @@ void LOITRUCK::create_CAN_Expedited_map()
     
     outer_it2 = this->res_arr.begin();
     for (outer_it = this->req_arr.begin(); outer_it != this->req_arr.end(); outer_it++){
-      this->CAN_Expedited_Map.insert(std::pair<String,String>(create_str(*outer_it, 0x641, 8), create_str(*outer_it2, 0x5C1, 8)));  
-      //Serial.println("Hier 1");
-      //Serial.println(create_str(*outer_it, 0x641, 8));
+      // Anzeige 643
+      this->CAN_Expedited_Map.insert(std::pair<String,String>(create_str(*outer_it, 0x643, 8), create_str(*outer_it2, prepare_ID(0x643), 8)));  
+      // Master 641
+      this->CAN_Expedited_Map.insert(std::pair<String,String>(create_str(*outer_it, 0x641, 8), create_str(*outer_it2, prepare_ID(0x641), 8)));  
+      // Lenkung 644
+      this->CAN_Expedited_Map.insert(std::pair<String,String>(create_str(*outer_it, 0x644, 8), create_str(*outer_it2, prepare_ID(0x644), 8)));  
+
       outer_it2++;
     }
 }
