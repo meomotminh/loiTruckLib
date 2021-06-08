@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <mcp2515.h>
+#include <LiquidCrystal_I2C.h>
 #include "loiTruck.h"
 
 
@@ -20,6 +21,71 @@
 // Global String
 String dic_req_str;
 String dic_res_str;
+
+
+// check if it is in concerning range 0x601 -> 0x67F
+bool check_COB_ID_range(can_frame req)
+{    
+    if (req.can_id >= 0x601 && req.can_id <= 0x67F)
+    {
+        return true;
+    } else return false;
+}
+
+// create map index & subindex to the corresponding index in the LOOK UP TABLE
+bool LOITRUCK::create_map()
+{   
+    std::map<int, int> temp;
+    int i = 0;
+    switch (this->selected_Truck) {
+        case 1: // ECE2252015
+            temp.insert(std::pair<int, int>(20001,i++));
+            temp.insert(std::pair<int, int>(20003,i++));
+            temp.insert(std::pair<int, int>(20011,i++));
+            
+            temp.insert(std::pair<int, int>(20021,i++));  // Seri nummer
+            
+            temp.insert(std::pair<int, int>(20022,i++));
+
+            temp.insert(std::pair<int, int>(20201,i++));  // betriebszeit
+            temp.insert(std::pair<int, int>(20202,i++));
+            temp.insert(std::pair<int, int>(21002,i++));
+            temp.insert(std::pair<int, int>(21006,i++));
+            temp.insert(std::pair<int, int>(21012,i++));
+            temp.insert(std::pair<int, int>(21016,i++));
+            temp.insert(std::pair<int, int>(21022,i++));
+            temp.insert(std::pair<int, int>(21026,i++));
+            temp.insert(std::pair<int, int>(21032,i++));
+            temp.insert(std::pair<int, int>(21036,i++));
+            temp.insert(std::pair<int, int>(21042,i++));
+            temp.insert(std::pair<int, int>(21061,i++));
+            temp.insert(std::pair<int, int>(22002,i++));
+            temp.insert(std::pair<int, int>(22006,i++));
+            temp.insert(std::pair<int, int>(22012,i++));
+            temp.insert(std::pair<int, int>(22016,i++));     
+
+            temp.insert(std::pair<int, int>(24132,i++)); //---- Lenkkorrektur ----
+            temp.insert(std::pair<int, int>(29232,i++)); //---- Bandagenentspannung ---
+            temp.insert(std::pair<int, int>(24142,i++)); //---- Lenkübersetzung ---
+            temp.insert(std::pair<int, int>(24612,i++)); //---- Status ---    
+            temp.insert(std::pair<int, int>(24052,i++)); //---- Sollwertgeber ---    
+            temp.insert(std::pair<int, int>(24022,i++)); //---- Istwertgeber ---  
+            
+            temp.insert(std::pair<int, int>(20012,i++)); //---- Logbuch sollindex ---    
+            temp.insert(std::pair<int, int>(20013,i++)); //---- Logbuch istindex ---    
+            temp.insert(std::pair<int, int>(24112,i++)); //---- Kennlinie ---    
+
+            temp.insert(std::pair<int, int>(24057,i++)); //---- Sollwertgeber 07 ---    
+            temp.insert(std::pair<int, int>(24602,i++)); //---- Istwertgeber 02 ---   
+            break;
+        default:
+            return false;
+            break;
+    }
+
+    this->CAN_Expedited_Map = temp;
+    return true; 
+}
 
 
 // Calculate COB_ID
@@ -71,12 +137,86 @@ __u8 prepare_Command_ID(can_frame req, bool end_msg)
     return command_ID;
 }
 
-answer LOITRUCK::prepare_Answer(can_frame req)
+bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked)
+{   
+    
+    if (clicked == 0){
+        // CLICKED
+        switch (this->_runState)
+        {
+            case STATE_WELCOME:
+                this->_runState = STATE_SELECT;
+                break;
+            case STATE_SELECT:
+                this->_runState = STATE_RUN;
+                break;
+            case STATE_RUN:
+                break;    
+            default:
+                break;
+        }
+    }
+
+    if (mapx > 400){
+        
+        // GO BACK
+        switch (this->_runState)
+        {
+            case STATE_WELCOME:
+                break;
+            case STATE_SELECT:
+                this->_runState = STATE_WELCOME;
+                this->_mousePos = 2;
+                break;
+            case STATE_RUN:
+                this->_runState = STATE_SELECT;
+                this->_mousePos = 2;
+                break;    
+            default:
+                break;
+        }
+    }
+
+    if (mapy < -100)
+    {
+        // GO DOWN
+        switch (this->_runState) {
+            case STATE_WELCOME:
+                if (this->_mousePos == 2){this->_mousePos++;}
+                break;
+            case STATE_SELECT:
+                if (this->_mousePos < 3){this->_mousePos++;}
+                break;
+            case STATE_RUN:
+                break;
+        }
+    } else if (mapy > 100)
+    {
+        // GO UP
+        switch (this->_runState) {
+            case STATE_WELCOME:
+                if (this->_mousePos == 3){this->_mousePos--;}
+                break;
+            case STATE_SELECT:
+                if (this->_mousePos > 0){this->_mousePos--;}
+                break;
+            case STATE_RUN:
+                break;
+        }
+    }
+
+    return true;
+}
+
+answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx)
 {
     answer to_Return;
+    // Find in the map
+    std::map<int, int>::iterator it;
+    
+    it = this->CAN_Expedited_Map.find(indx_subindx);
+    int indx_in_res_table;
 
-    __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
-    __u8 subindex_ID = req.data[3];
     __u8 command_id = req.data[0];
 
     
@@ -85,29 +225,220 @@ answer LOITRUCK::prepare_Answer(can_frame req)
     to_Return.data1 = 0x00;
     to_Return.data2 = 0x00;
     to_Return.data3 = 0x00;
-    // SWITCH FOR INDEX + SUBINDEX
-    switch (index_ID){
-        case 0x2002: // Fahrzeug info   
-            if (subindex_ID == 0x01 && command_id == 0x40) // Read Seri Nummer                       
-            {
-                to_Return.data0 = this->loiTruck_Seri0;
-                to_Return.data1 = this->loiTruck_Seri1;
-                to_Return.data2 = this->loiTruck_Seri2;
-                to_Return.data3 = this->loiTruck_Seri3;
-            }
-            break;
-        case 0x2020: // Betriebszeit
-            if (subindex_ID == 0x01 && command_id == 0x40) // Read Seri Nummer
-            {
-                to_Return.data0 = this->loiTruck_Zeit0;
-                to_Return.data1 = this->loiTruck_Zeit1;
-                to_Return.data2 = 0x00;
-                to_Return.data3 = 0x00;
-            } else {
-                
-            }                        
-            break;
+
+    // if found in map
+    if (it != this->CAN_Expedited_Map.end())
+    {
+        indx_in_res_table = (it->second);
+        if (this->selected_Truck == 1){
+            //Serial.println(indx_in_res_table);           
+                //---------------- WEIRD BEHAVIOR (without switch not run properly)--------------------------
+                 switch (indx_in_res_table){
+                    case 0: // res_2000_01_1
+                        to_Return.data0 = pgm_read_byte(*(&res_table_1[indx_in_res_table]));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 1: // res_2000_03_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 2: // res_2001_01_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 3:  // Seri nummer res_2002_01_1
+                        to_Return.data0 = this->loiTruck_Seri0;
+                        to_Return.data1 = this->loiTruck_Seri1;
+                        to_Return.data2 = this->loiTruck_Seri2;
+                        to_Return.data3 = this->loiTruck_Seri3;
+                        break;
+                    case 4: // res_2002_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 5:  // betriebszeit res_2020_01_1
+                        to_Return.data0 = this->loiTruck_Zeit0;
+                        to_Return.data1 = this->loiTruck_Zeit1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 6: // res_2020_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 7: // res_2100_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 8: // res_2100_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 9: // res_2101_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 10: // res_2101_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 11: // res_2102_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 12: // res_2102_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 13: // res_2103_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 14: // res_2103_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 15: // res_2104_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 16: // res_2106_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    case 17: // res_2200_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                    
+                    case 18: // res_2200_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break; 
+                    case 19: // res_2201_02_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+                        
+                    case 20: // res_2201_06_1
+                        to_Return.data0 = pgm_read_byte(*(&(res_table_1[indx_in_res_table])));
+                        to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
+                        to_Return.data2 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+2);
+                        to_Return.data3 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+3);
+                        break;
+
+                    case 21: //---- Lenkkorrektur 2413---- 
+                        to_Return.data0 = this->loiTruck_Lenken_Korrektur;
+                        to_Return.data1 = 0x00;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 22: //---- Bandagenentspannung 2923---
+                        to_Return.data0 = this->loiTruck_Lenken_Zeit_Einfall;
+                        to_Return.data1 = 0x00;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 23: //---- Lenkübersetzung 2414---
+                        to_Return.data0 = this->loiTruck_Lenken_Ubersetzung;
+                        to_Return.data1 = 0x00;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 24: //---- Status 2461---                        
+                        to_Return.data0 = this->loiTruck_Lenken_Status_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Status_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 25: //---- Sollwert 2405 02---      
+                        to_Return.data0 = this->loiTruck_Lenken_Sollwertgeber_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Sollwertgeber_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 26: //---- Status 2402---
+                        to_Return.data0 = this->loiTruck_Lenken_Istwertgeber_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Istwertgeber_1;   
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    case 27: //---- Logbuch sollindex 2001 02---
+                        break;
+
+                    case 28: //---- Status ist index 2001 03---
+                        to_Return.data0 = this->loiTruck_Logbuch_SavedIndx;                         
+                        to_Return.data1 = 0x00;   
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+
+                    case 29: //---- Kennlinie 2411 02---
+                        to_Return.data0 = this->loiTruck_Lenken_Kennlinie;                         
+                        to_Return.data1 = 0x00;   
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;
+                        break;
+                    
+                    case 30: //---- Sollwertgeber 2405 07---
+                        to_Return.data0 = this->loiTruck_Lenken_Sollwertgeber_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Sollwertgeber_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+                    
+                    case 31: //---- Istwertgeber 2460 02---
+                        to_Return.data0 = this->loiTruck_Lenken_Status_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Status_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    default:                        
+                        break;
+                 }
+                     
+        }
+
     }
+
+    
     return to_Return;
 }
 
@@ -130,10 +461,102 @@ bool LOITRUCK::actuator(can_frame req_frame)
         Serial.println("Write zeit");
         this->loiTruck_Zeit0 = req_frame.data[4];
         this->loiTruck_Zeit1 = req_frame.data[5];        
+    } 
+    // write lenkkorrektur 0x2413
+    else if (command_id == 0x2b && req_frame.data[1] == 0x13 && req_frame.data[2] == 0x24 && req_frame.data[3] == 0x02)
+    {   
+        Serial.println("Write Lenkkorrektur");
+        this->loiTruck_Lenken_Korrektur = req_frame.data[4];
+    } 
+    // write bandagenentspannung 0x2923
+    else if (command_id == 0x2b && req_frame.data[1] == 0x23 && req_frame.data[2] == 0x29 && req_frame.data[3] == 0x02)
+    {   
+        Serial.println("Write Bandagenentspannung");
+        this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4];        
+    } 
+    // write Lenkübersetzung 0x2414
+    else if (command_id == 0x2b && req_frame.data[1] == 0x14 && req_frame.data[2] == 0x24 && req_frame.data[3] == 0x02)
+    {   
+        Serial.println("Write Lenkübersetzung");
+        this->loiTruck_Lenken_Ubersetzung = req_frame.data[4];        
     }
-
+    // write Logbuch 0x2001
+    else if (command_id == 0x2f && req_frame.data[1] == 0x01 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x02)
+    {
+        Serial.println("Write Logbuch");
+        this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
+    }
+    // write Sollwertgeber 0x2405
+    else if (command_id == 0x2f && req_frame.data[1] == 0x01 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x02)
+    {
+        Serial.println("Write Logbuch");
+        this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
+    }
     return true;
 }
+
+bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
+{
+    switch (this->_runState) {
+        case STATE_WELCOME:
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.print("LabTruck       v1.0");
+            lcd.setCursor(0, this->_mousePos);
+            lcd.print("->");
+            lcd.setCursor(4,2);
+            lcd.print("Select Truck");
+            lcd.setCursor(4,3);
+            lcd.print("Demo / Test");
+            break;
+        case STATE_SELECT:
+            lcd.clear();
+            lcd.setCursor(0, this->_mousePos);
+            lcd.print("->");
+            lcd.setCursor(3,0);
+            lcd.print("EFG 4xx5xx (2019)");
+            lcd.setCursor(3,1);
+            lcd.print("EJE 1xx2xx (2018)");
+            lcd.setCursor(3,2);
+            lcd.print("ECE 2xx (2018)");
+            lcd.setCursor(3,3);
+            lcd.print("ERE 2xx (2016)");
+            break;
+        case STATE_RUN:
+            lcd.clear();
+            lcd.setCursor(4,0);
+            switch (this->_runMode) {
+                case 0: 
+                    lcd.print("MODE HAPPY");
+                    break;
+                case 1:
+                    lcd.print("MODE ADT");
+                    break;
+                case 2:
+                    lcd.print("MODE UNHAPPY");
+                    break;
+                case 3:
+                    lcd.print("MODE IGNORE");
+                    break;
+            }    
+            break;
+        default:
+            break;
+    } 
+    return true;
+}
+
+// DEMO / TEST
+void LOITRUCK::demo_test()
+{
+    // LED
+
+    // SERVO MOTOR
+    
+}
+
+
+
 
 // Util func to assign arr
 void assign_arr(__u8 data[8],__u8 byte1, __u8 byte2,__u8 byte3,__u8 byte4,__u8 byte5,__u8 byte6,__u8 byte7,__u8 byte8)
@@ -161,6 +584,7 @@ void display_CAN_Frame(can_frame _toDisplay)
     {
         Serial.print(_toDisplay.data[i],HEX); Serial.print(" ");
     }
+    Serial.println();
 }
 
 // Create CAN FRAME
@@ -218,8 +642,6 @@ can_frame create_frame_from_str(String _toConvert)
         
     }
 
-    
-
     return temp;
 }
 
@@ -270,7 +692,7 @@ can_frame LOITRUCK::get_Segmented_Response()
 
     if (this->count_segmented == 0){
         String temp = create_str_from_frame(this->receive_Segment_Req);
-        std::map<String,String>::iterator it = this->CAN_Segmented_Map.find(temp);
+        std::map<String,String>::const_iterator it = this->CAN_Segmented_Map.find(temp);
         tempstr = it->second;
     } else {
         tempstr = this->segmented_res_Fahrzeug_Name[this->count_segmented - 1];                // because not include the 1st response
@@ -295,27 +717,36 @@ can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
     String tempstr = create_str_from_frame(_toGet);
     can_frame temp;    
     __u8 test_command_ID = _toGet.data[0];
-    bool end_msg;
     answer anwort;
+    bool end_msg;
+    
+    
+    // ------------ Prepare str to compare in map --------------
+    String sub_indx = String(_toGet.data[1],HEX);
 
-    std::map<String,String>::iterator it = this->CAN_Expedited_Map.find(tempstr);
+    if(sub_indx.length() == 1){
+        sub_indx = "0" + sub_indx;
+    }
+
+    int indx_subindx = (String(_toGet.data[2],HEX) + sub_indx + String(_toGet.data[3],HEX)).toInt();
+
+    // --------------
+    // Test prepare command ID
+    if ((test_command_ID == 0x60 || test_command_ID == 0x70) && this->count_segmented == 4){end_msg = true;} else {end_msg = false;}
+
+    
     __u8 data[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-    // if found in map
-    if (it != this->CAN_Expedited_Map.end()){
-        tempstr = it->second;
-        temp = create_frame_from_str(tempstr);
-    } else {
-        // Test prepare command ID
-        if ((test_command_ID == 0x60 || test_command_ID == 0x70) && this->count_segmented == 4){end_msg = true;} else {end_msg = false;}
-
-        // actuator if needed
-        this->actuator(_toGet);
-        anwort = this->prepare_Answer(_toGet);
+    
+    // actuator if needed
+    this->actuator(_toGet);
+    
+    // get anwort
+    anwort = this->prepare_Answer(_toGet, indx_subindx);
         
-        assign_arr(data, prepare_Command_ID(_toGet, end_msg), _toGet.data[1], _toGet.data[2], _toGet.data[3], anwort.data0, anwort.data1, anwort.data2, anwort.data3); // all bytes count
-        temp = create_CAN_frame(prepare_ID(_toGet.can_id), 8, data); // NOT YET TEST
-    }
+    assign_arr(data, prepare_Command_ID(_toGet, end_msg), _toGet.data[1], _toGet.data[2], _toGet.data[3], anwort.data0, anwort.data1, anwort.data2, anwort.data3); // all bytes count
+    temp = create_CAN_frame(prepare_ID(_toGet.can_id), 8, data);
+
 
     return temp;
 }
@@ -343,7 +774,7 @@ bool LOITRUCK::check_Segmented(can_frame _toTest)
 {
     String temp = create_str_from_frame(_toTest);
     
-    std::map<String,String>::iterator it = this->CAN_Segmented_Map.find(temp);
+    std::map<String,String>::const_iterator it = this->CAN_Segmented_Map.find(temp);
     if (it != this->CAN_Segmented_Map.end()){
         // if is Segmented then initialize
         this->initial_Segmented_Transmit(_toTest);        
@@ -354,10 +785,8 @@ bool LOITRUCK::check_Segmented(can_frame _toTest)
 
 int LOITRUCK::create_req_res_arr()
 {
-    std::vector<__u8> inner_req;
-    std::vector<__u8> inner_res;
-    std::vector<std::vector<__u8>>::const_iterator it;
-    std::vector<__u8>::const_iterator it2;
+    std::vector<__u8> inner_req;             // SAVE IN FLASH MEMORY
+    std::vector<__u8> inner_res;             // SAVE IN FLASH MEMORY
     __u8 data_req_1[8];
     __u8 data_res_1[8];
     // SERIENNUMMER    NOT RO
@@ -1521,9 +1950,10 @@ String create_str(std::vector<__u8> data, __u16 can_id, int can_dlc)
   return s;
 }
 
+/*
 void LOITRUCK::create_CAN_Expedited_map()
 {
-    std::vector<std::vector<__u8>>::iterator outer_it, outer_it2;
+    std::vector<std::vector<__u8>>::const_iterator outer_it, outer_it2;
     
     outer_it2 = this->res_arr.begin();
     for (outer_it = this->req_arr.begin(); outer_it != this->req_arr.end(); outer_it++){
@@ -1537,6 +1967,7 @@ void LOITRUCK::create_CAN_Expedited_map()
       outer_it2++;
     }
 }
+*/
 
 void LOITRUCK::create_CAN_Segmented_map()
 {
