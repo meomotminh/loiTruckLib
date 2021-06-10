@@ -10,6 +10,7 @@
 #include <SPI.h>
 #include <mcp2515.h>
 #include <LiquidCrystal_I2C.h>
+#include <Servo.h>
 #include "loiTruck.h"
 
 
@@ -37,8 +38,9 @@ bool LOITRUCK::create_map()
 {   
     std::map<int, int> temp;
     int i = 0;
+    Serial.print("Selected Truck "); Serial.println(this->selected_Truck);
     switch (this->selected_Truck) {
-        case 1: // ECE2252015
+        case 2: // ECE2252015
             temp.insert(std::pair<int, int>(20001,i++));
             temp.insert(std::pair<int, int>(20003,i++));
             temp.insert(std::pair<int, int>(20011,i++));
@@ -68,22 +70,49 @@ bool LOITRUCK::create_map()
             temp.insert(std::pair<int, int>(29232,i++)); //---- Bandagenentspannung ---
             temp.insert(std::pair<int, int>(24142,i++)); //---- Lenkübersetzung ---
             temp.insert(std::pair<int, int>(24612,i++)); //---- Status ---    
-            temp.insert(std::pair<int, int>(24052,i++)); //---- Sollwertgeber ---    
-            temp.insert(std::pair<int, int>(24022,i++)); //---- Istwertgeber ---  
+            temp.insert(std::pair<int, int>(24052,i++)); //---- SollLenkwinkel Link ---    
+            temp.insert(std::pair<int, int>(24022,i++)); //---- IstLenkwinkel Link ---  
             
             temp.insert(std::pair<int, int>(20012,i++)); //---- Logbuch sollindex ---    
             temp.insert(std::pair<int, int>(20013,i++)); //---- Logbuch istindex ---    
             temp.insert(std::pair<int, int>(24112,i++)); //---- Kennlinie ---    
 
-            temp.insert(std::pair<int, int>(24057,i++)); //---- Sollwertgeber 07 ---    
-            temp.insert(std::pair<int, int>(24602,i++)); //---- Istwertgeber 02 ---   
+            temp.insert(std::pair<int, int>(24057,i++)); //---- SollLenkwinkel Link 07 ---    
+            temp.insert(std::pair<int, int>(24602,i++)); //---- IstLenkwinkel Link 02 ---   
+            
+            temp.insert(std::pair<int, int>(24042,i++)); //---- SollLenkwinkel Recht ---- 
+            temp.insert(std::pair<int, int>(24012,i++)); //---- IstLenkwinkel Recht ---- 
+            
+            temp.insert(std::pair<int, int>(24032,i++)); //---- SollLenkwinkel Null ----  
+            
+            
+            temp.insert(std::pair<int, int>(24002,i++)); //---- IstLenkwinkel Null non teach ----  
+            temp.insert(std::pair<int, int>(24037,i++)); //---- Min IstLenkwinkel Null teach ---- 
+            temp.insert(std::pair<int, int>(24047,i++)); //---- Min IstLenkwinkel Recht teach ---- 
+            temp.insert(std::pair<int, int>(24057,i++)); //---- Min IstLenkwinkel Link teach ---- 
+            
+            
             break;
         default:
+            this->_runState = STATE_WELCOME;    // non existed then fall back
+            Serial.println("Not create map");
             return false;
             break;
     }
 
     this->CAN_Expedited_Map = temp;
+    
+    Serial.println("Created map");
+    // PRINT CAN_Expedited_Map
+    Serial.print("Expedited Map size : ");
+    Serial.println(this->CAN_Expedited_Map.size());
+      
+    std::map<int, int>::iterator it;
+    for (it = this->CAN_Expedited_Map.begin(); it != this->CAN_Expedited_Map.end(); ++it){
+        Serial.print(it->first);Serial.print("-->");Serial.println(it->second);       
+    }        
+
+    
     return true; 
 }
 
@@ -118,7 +147,13 @@ __u8 prepare_Command_ID(can_frame req, bool end_msg)
         case 0x01:  // download domain segment toggle = 1
             command_ID |= 0x20;  // or to remain toggle bit
         case 0x40:  // initiate domain upload
-            command_ID |= 0x03;  // n = 0; e = s = 1
+            if (req.data[2] == 0x24 && subindex_ID == 0x02)
+            {
+                command_ID |= 0x0B;    // follow Noris excel   
+            } else {
+                command_ID |= 0x03;  // n = 0; e = s = 1
+            }
+            
             break;        
         case 0x60:  // upload domain segment with toggle bit = 0
             if (end_msg) {command_ID = 0x01;} else {command_ID = 0x00;}
@@ -137,20 +172,29 @@ __u8 prepare_Command_ID(can_frame req, bool end_msg)
     return command_ID;
 }
 
-bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked)
+bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrystal_I2C lcd)
 {   
-    
     if (clicked == 0){
         // CLICKED
         switch (this->_runState)
         {
             case STATE_WELCOME:
-                this->_runState = STATE_SELECT;
+                if (this->_mousePos == 2){
+                    this->_runState = STATE_SELECT_TRUCK;
+                } else if (this->_mousePos == 3){
+                    this->_runState = STATE_DEMO;
+                    this->display_LCD(lcd);
+                    this->demo_test();    
+                }                
                 break;
-            case STATE_SELECT:
-                this->_runState = STATE_RUN;
+            case STATE_SELECT_TRUCK:
+                this->_runState = STATE_SELECT_MODE;
+                this->selected_Truck = this->_mousePos;
+                this->create_map();
                 break;
-            case STATE_RUN:
+            case STATE_SELECT_MODE:
+                this->_runState = STATE_RUN;                
+                this->_runMode = RUN_MODE(this->_mousePos);
                 break;    
             default:
                 break;
@@ -164,12 +208,20 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked)
         {
             case STATE_WELCOME:
                 break;
-            case STATE_SELECT:
+            case STATE_SELECT_TRUCK:
                 this->_runState = STATE_WELCOME;
                 this->_mousePos = 2;
                 break;
+            case STATE_SELECT_MODE:
+                this->_runState = STATE_SELECT_TRUCK;
+                this->_mousePos = 2;
+                break;
             case STATE_RUN:
-                this->_runState = STATE_SELECT;
+                this->_runState = STATE_SELECT_MODE;
+                this->_mousePos = 2;
+                break;
+            case STATE_DEMO:
+                this->_runState = STATE_WELCOME;
                 this->_mousePos = 2;
                 break;    
             default:
@@ -180,29 +232,39 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked)
     if (mapy < -100)
     {
         // GO DOWN
+        if (this->_mousePos < 3) {this->_mousePos++;}
+        /*
         switch (this->_runState) {
             case STATE_WELCOME:
                 if (this->_mousePos == 2){this->_mousePos++;}
                 break;
-            case STATE_SELECT:
+            case STATE_SELECT_TRUCK:
                 if (this->_mousePos < 3){this->_mousePos++;}
                 break;
+            case STATE_SELECT_MODE:
+                if (this->_mousePos < 3){this->_mousePos++;}
             case STATE_RUN:
                 break;
         }
+        */
     } else if (mapy > 100)
     {
         // GO UP
+        if (this->_mousePos > 0){this->_mousePos--;}
+        /*
         switch (this->_runState) {
             case STATE_WELCOME:
-                if (this->_mousePos == 3){this->_mousePos--;}
-                break;
-            case STATE_SELECT:
                 if (this->_mousePos > 0){this->_mousePos--;}
                 break;
+            case STATE_SELECT_TRUCK:
+                if (this->_mousePos > 0){this->_mousePos--;}
+                break;
+            case STATE_SELECT_MODE:
+                if (this->_mousePos > 0){this->_mousePos--;}
             case STATE_RUN:
                 break;
         }
+        */
     }
 
     return true;
@@ -230,7 +292,8 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx)
     if (it != this->CAN_Expedited_Map.end())
     {
         indx_in_res_table = (it->second);
-        if (this->selected_Truck == 1){
+        
+            
             //Serial.println(indx_in_res_table);           
                 //---------------- WEIRD BEHAVIOR (without switch not run properly)--------------------------
                  switch (indx_in_res_table){
@@ -388,14 +451,14 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx)
                         to_Return.data3 = 0x00;
                         break;
                     case 25: //---- Sollwert 2405 02---      
-                        to_Return.data0 = this->loiTruck_Lenken_Sollwertgeber_0;                         
-                        to_Return.data1 = this->loiTruck_Lenken_Sollwertgeber_1;
+                        to_Return.data0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;
                         to_Return.data2 = 0x00;
                         to_Return.data3 = 0x00;
                         break;
                     case 26: //---- Status 2402---
-                        to_Return.data0 = this->loiTruck_Lenken_Istwertgeber_0;                         
-                        to_Return.data1 = this->loiTruck_Lenken_Istwertgeber_1;   
+                        to_Return.data0 = this->loiTruck_Lenken_IstLenkwinkel_Link_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_IstLenkwinkel_Link_1;   
                         to_Return.data2 = 0x00;
                         to_Return.data3 = 0x00;
                         break;
@@ -416,25 +479,69 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx)
                         to_Return.data3 = 0x00;
                         break;
                     
-                    case 30: //---- Sollwertgeber 2405 07---
-                        to_Return.data0 = this->loiTruck_Lenken_Sollwertgeber_0;                         
-                        to_Return.data1 = this->loiTruck_Lenken_Sollwertgeber_1;
+                    case 30: //---- SollLenkwinkel Link 2405 07---
+                        to_Return.data0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;
                         to_Return.data2 = 0x00;
                         to_Return.data3 = 0x00;                  
                         break;
                     
-                    case 31: //---- Istwertgeber 2460 02---
+                    case 31: //---- IstLenkwinkel 2460 02---
                         to_Return.data0 = this->loiTruck_Lenken_Status_0;                         
                         to_Return.data1 = this->loiTruck_Lenken_Status_1;
                         to_Return.data2 = 0x00;
                         to_Return.data3 = 0x00;                  
                         break;
 
+                    case 32: //---- SollLenkwinkel Recht 2404 02---
+                        to_Return.data0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 33: //---- IstLenkwinkel Recht 2401 02---
+                        to_Return.data0 = this->loiTruck_Lenken_IstLenkwinkel_Recht_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_IstLenkwinkel_Recht_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 34: //---- SollLenkwinkel Null 2403 02---
+                        to_Return.data0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 35: //---- IstLenkwinkel Null 2400 02---
+                        to_Return.data0 = this->loiTruck_Lenken_IstLenkwinkel_Null_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_IstLenkwinkel_Null_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 36: //---- Min IstLenkwinkel Null teach---
+                        to_Return.data0 = this->loiTruck_Lenken_IstLenkwinkel_Null_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_IstLenkwinkel_Null_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 37: //---- Min IstLenkwinkel Recht teach---
+                        to_Return.data0 = this->loiTruck_Lenken_IstLenkwinkel_Recht_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_IstLenkwinkel_Recht_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    
+
                     default:                        
                         break;
                  }
                      
-        }
+        
 
     }
 
@@ -442,14 +549,15 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx)
     return to_Return;
 }
 
-bool LOITRUCK::actuator(can_frame req_frame)
+bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
 {
     __u8 command_id = req_frame.data[0];
     
     // write serial nummer
     if (command_id == 0x23 && req_frame.data[1] == 0x02 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x01)
     {   
-        Serial.println("Write Seri");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
         this->loiTruck_Seri0 = req_frame.data[4];
         this->loiTruck_Seri1 = req_frame.data[5];
         this->loiTruck_Seri2 = req_frame.data[6];
@@ -458,47 +566,131 @@ bool LOITRUCK::actuator(can_frame req_frame)
     // write betrieb zeit
     else if (command_id == 0x2b && req_frame.data[1] == 0x20 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x01)
     {   
-        Serial.println("Write zeit");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
         this->loiTruck_Zeit0 = req_frame.data[4];
         this->loiTruck_Zeit1 = req_frame.data[5];        
     } 
     // write lenkkorrektur 0x2413
     else if (command_id == 0x2b && req_frame.data[1] == 0x13 && req_frame.data[2] == 0x24 && req_frame.data[3] == 0x02)
     {   
-        Serial.println("Write Lenkkorrektur");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
+        //Serial.println("Write Lenkkorrektur");
         this->loiTruck_Lenken_Korrektur = req_frame.data[4];
     } 
     // write bandagenentspannung 0x2923
     else if (command_id == 0x2b && req_frame.data[1] == 0x23 && req_frame.data[2] == 0x29 && req_frame.data[3] == 0x02)
     {   
-        Serial.println("Write Bandagenentspannung");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
+        //Serial.println("Write Bandagenentspannung");
         this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4];        
     } 
     // write Lenkübersetzung 0x2414
     else if (command_id == 0x2b && req_frame.data[1] == 0x14 && req_frame.data[2] == 0x24 && req_frame.data[3] == 0x02)
     {   
-        Serial.println("Write Lenkübersetzung");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
+        //Serial.println("Write Lenkübersetzung");
         this->loiTruck_Lenken_Ubersetzung = req_frame.data[4];        
     }
     // write Logbuch 0x2001
     else if (command_id == 0x2f && req_frame.data[1] == 0x01 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x02)
     {
-        Serial.println("Write Logbuch");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
+        //Serial.println("Write Logbuch");
         this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
     }
     // write Sollwertgeber 0x2405
     else if (command_id == 0x2f && req_frame.data[1] == 0x01 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x02)
     {
-        Serial.println("Write Logbuch");
+        lcd.setCursor(2,0);
+        lcd.print(create_str_from_frame(req_frame));
+        //Serial.println("Write Logbuch");
         this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
     }
     return true;
 }
 
+void LOITRUCK::actuate_servo(int minPot, int maxPot)
+{
+    // potPin = A0
+    int val = analogRead(A0);
+    int servoWrite = map(val, minPot, maxPot, 0, 180);  
+
+    //Serial.print("Servo map "); Serial.println(servoWrite);
+    
+    if (abs(val - this->last_Servo_Pos) > 10){
+        String tempstr = String(val,HEX);
+        __u8 firstByte = strtoul(tempstr.substring(0, 2).c_str(),NULL,16);
+        __u8 secondByte = strtoul(tempstr.substring(2).c_str(),NULL,16);
+
+        Serial.println("Servo Pos");
+        Serial.print(tempstr + " "); Serial.print(firstByte,HEX);Serial.print(" "); Serial.println(secondByte,HEX);
+
+        if ( servoWrite > 85 && servoWrite < 95)    // Mitte
+        {
+            this->loiTruck_Lenken_SollLenkwinkel_Null_0 = secondByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Null_1 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Null_0 = secondByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Null_1 = firstByte;
+
+            this->loiTruck_Lenken_Status_0 = 0x11;
+            this->loiTruck_Lenken_Status_1 = 0x11;
+        } else if (servoWrite < 80) // Left
+        {
+            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = secondByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Link_0 = secondByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Link_1 = firstByte;
+
+            this->loiTruck_Lenken_Status_0 = 0x22;
+            this->loiTruck_Lenken_Status_1 = 0x22;
+
+        } else if (servoWrite > 100)
+        {
+            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = secondByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = secondByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = firstByte;
+
+            this->loiTruck_Lenken_Status_0 = 0x44;
+            this->loiTruck_Lenken_Status_1 = 0x44;
+        }
+    
+
+
+        this->_servo.write(servoWrite);
+    } else {
+        this->loiTruck_Lenken_Status_0 = 0x77;
+        this->loiTruck_Lenken_Status_1 = 0x77;
+    }
+
+    this->last_Servo_Pos = val;
+    
+
+}
+
 bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
 {
+    char buffer[30];
+
+
+    uint8_t smiley[8] = {0x0, 0x11, 0x0, 0x0, 0x11, 0x0E, 0x0};
+    uint8_t neutral[8] = {0x0, 0x11, 0x0, 0x0, 0x1F, 0x0, 0x0};
+    uint8_t sad[8] = {0x0, 0x11, 0x0, 0x0E, 0x11, 0x0, 0x0};
+    uint8_t angry[8] = {0x0, 0x11, 0x0, 0x0A, 0x15, 0x0, 0x0};
+
+    lcd.createChar(0, smiley);
+    lcd.createChar(1, neutral);
+    lcd.createChar(2, sad);
+    lcd.createChar(3, angry);
+
+ 
     switch (this->_runState) {
-        case STATE_WELCOME:
+        case STATE_WELCOME:            
             lcd.clear();
             lcd.setCursor(0,0);
             lcd.print("LabTruck       v1.0");
@@ -509,36 +701,56 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
             lcd.setCursor(4,3);
             lcd.print("Demo / Test");
             break;
-        case STATE_SELECT:
+        case STATE_SELECT_TRUCK:
             lcd.clear();
             lcd.setCursor(0, this->_mousePos);
             lcd.print("->");
-            lcd.setCursor(3,0);
-            lcd.print("EFG 4xx5xx (2019)");
-            lcd.setCursor(3,1);
-            lcd.print("EJE 1xx2xx (2018)");
-            lcd.setCursor(3,2);
-            lcd.print("ECE 2xx (2018)");
-            lcd.setCursor(3,3);
-            lcd.print("ERE 2xx (2016)");
+            
+            for (int i = 0; i < 4; i++)
+            {
+                strcpy_P(buffer, (char *)pgm_read_word(&(string_table[i])));
+                lcd.setCursor(3,i);
+                lcd.print(buffer);
+            }
+            break;
+        case STATE_SELECT_MODE:
+            lcd.clear();
+            lcd.setCursor(0, this->_mousePos);
+            lcd.print("->");
+
+            for (int i = 4; i < 8; i++)
+            {
+                strcpy_P(buffer, (char *)pgm_read_word(&(string_table[i])));
+                lcd.setCursor(3,i-4);
+                lcd.print(buffer);
+            }
             break;
         case STATE_RUN:
             lcd.clear();
-            lcd.setCursor(4,0);
+            lcd.setCursor(0,0);
+            strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
+            lcd.print(buffer);lcd.print(" ");
             switch (this->_runMode) {
-                case 0: 
-                    lcd.print("MODE HAPPY");
+                case 0: // Happy
+                    lcd.write(0); // smiley
                     break;
-                case 1:
-                    lcd.print("MODE ADT");
+                case 1: // ADT
+                    lcd.write(1); // neutral
                     break;
-                case 2:
-                    lcd.print("MODE UNHAPPY");
+                case 2: // unhappy
+                    lcd.write(2); // sad
                     break;
-                case 3:
-                    lcd.print("MODE IGNORE");
+                case 3: // ignore
+                    lcd.write(3); // angry
+                default: 
                     break;
-            }    
+            }
+            
+            break;
+        case STATE_DEMO:
+            lcd.clear();
+            lcd.setCursor(4,0);
+            lcd.print("DEMO");
             break;
         default:
             break;
@@ -549,10 +761,17 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
 // DEMO / TEST
 void LOITRUCK::demo_test()
 {
-    // LED
+    // LED    
 
-    // SERVO MOTOR
-    
+    // SERVO MOTOR - run 2 round
+    int _outServo = 0;    
+    for (int i = 0; i < 8; i++){
+        this->_servo.write(_outServo);    
+        delay(100);
+        if (i < 4){_outServo += 45;}
+        else {_outServo -= 45;}
+    }
+
 }
 
 
@@ -682,7 +901,7 @@ void LOITRUCK::set_expecting_Segmented_Req(int count){
     this->expecting_Segment_frame = create_CAN_frame(0x581, 8, data);
 }
 
-can_frame LOITRUCK::get_Segmented_Response()
+can_frame LOITRUCK::get_Segmented_Response(LiquidCrystal_I2C lcd)
 {
         
     String tempstr;
@@ -698,6 +917,9 @@ can_frame LOITRUCK::get_Segmented_Response()
         tempstr = this->segmented_res_Fahrzeug_Name[this->count_segmented - 1];                // because not include the 1st response
     }
 
+    //lcd.setCursor(2,0);
+    //lcd.print("Res ");lcd.print(tempstr);
+
   
     toReturn = create_frame_from_str(tempstr);
     this->count_segmented++;
@@ -712,7 +934,7 @@ can_frame LOITRUCK::get_Segmented_Response()
     return toReturn;
 }
 
-can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
+can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet, LiquidCrystal_I2C lcd)
 {
     String tempstr = create_str_from_frame(_toGet);
     can_frame temp;    
@@ -739,7 +961,7 @@ can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
 
     
     // actuator if needed
-    this->actuator(_toGet);
+    this->actuator(_toGet,lcd);
     
     // get anwort
     anwort = this->prepare_Answer(_toGet, indx_subindx);
@@ -747,6 +969,9 @@ can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet)
     assign_arr(data, prepare_Command_ID(_toGet, end_msg), _toGet.data[1], _toGet.data[2], _toGet.data[3], anwort.data0, anwort.data1, anwort.data2, anwort.data3); // all bytes count
     temp = create_CAN_frame(prepare_ID(_toGet.can_id), 8, data);
 
+    // print on lcd
+    //lcd.setCursor(2,0);
+    //lcd.print("Res "); lcd.print(create_str_from_frame(temp));
 
     return temp;
 }
@@ -2694,3 +2919,4 @@ void show_Dic(map<char *, char *> dic) {
 //   4. Use the Error List window to view errors
 //   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
 //   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
+

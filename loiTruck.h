@@ -4,7 +4,8 @@
 
 #include <SPI.h>
 #include <Arduino.h>
-
+#include <Servo.h>
+#include <LiquidCrystal_I2C.h>
 #include <stdint.h>
 
 //#include <iterator>
@@ -15,6 +16,8 @@
 //#include <bitset>
 //#include <vector>
 //#include <map>
+
+
 
     enum SERIENUMMER : uint8_t {
         Seri0_HAPPY = 0xC7,
@@ -259,13 +262,43 @@ const PROGMEM uint8_t res_2413_02_1[]  = {}; //---- Lenkkorrektur ----
 const PROGMEM uint8_t res_2923_02_1[]  = {}; //---- Bandagenentspannung ---
 const PROGMEM uint8_t res_2414_02_1[]  = {}; //---- Lenkübersetzung ---
 const PROGMEM uint8_t res_2461_02_1[]  = {}; //---- Status ---
-const PROGMEM uint8_t res_2405_02_1[]  = {}; //---- Sollwertgeber ----
-const PROGMEM uint8_t res_2402_02_1[]  = {}; //---- Istwertgeber ----
+
 const PROGMEM uint8_t res_2001_02_1[]  = {}; //---- Soll Indx Logbuch ---
 const PROGMEM uint8_t res_2001_03_1[]  = {}; //---- Ist Indx Logbuch ---
 const PROGMEM uint8_t res_2411_02_1[]  = {}; //---- Kennlinie ---
-const PROGMEM uint8_t res_2405_07_1[]  = {}; //---- Sollwertgeber subindx 7 ---
-const PROGMEM uint8_t res_2460_02_1[]  = {}; //---- Istwertgeber ----------
+
+const PROGMEM uint8_t res_2405_02_1[]  = {}; //---- SollLenkwinkel Link ----
+const PROGMEM uint8_t res_2402_02_1[]  = {}; //---- Istwertgeber Null ----
+const PROGMEM uint8_t res_2405_07_1[]  = {}; //---- SollLenkwinkel Link Min value subindx 7 ---
+const PROGMEM uint8_t res_2460_02_1[]  = {}; //---- Status Lenken ----------
+
+const PROGMEM uint8_t res_2404_02_1[]  = {}; //---- SollLenkwinkel Recht ----
+const PROGMEM uint8_t res_2401_02_1[]  = {}; //---- IstLenkwinkel Recht ----
+
+const PROGMEM uint8_t res_2403_02_1[]  = {}; //---- SollLenkwinkel Null ----
+
+
+const PROGMEM uint8_t res_2400_02_1[]  = {}; //---- IstLenkwinkel Null not teach---
+const PROGMEM uint8_t res_2403_07_1[]  = {}; //---- Min IstLenkwinkel Null teach---
+const PROGMEM uint8_t res_2404_07_1[]  = {}; //---- Min IstLenkwinkel Recht teach---
+
+
+
+
+//---------------------String for LCD---------------------------------
+const char avai_Truck_0[] PROGMEM = "EFG 4xx5xx (2019)";
+const char avai_Truck_1[] PROGMEM = "EJE 1xx2xx (2018)";
+const char avai_Truck_2[] PROGMEM = "ECE 2xx (2018)";
+const char avai_Truck_3[] PROGMEM = "ERE 2xx (2016)";
+
+const char mode_0[] PROGMEM = "MODE HAPPY";
+const char mode_1[] PROGMEM = "MODE ADT";
+const char mode_2[] PROGMEM = "MODE UNHAPPY";
+const char mode_3[] PROGMEM = "MODE IGNORE";
+
+const char * const string_table[] PROGMEM = {avai_Truck_0,avai_Truck_1,avai_Truck_2,avai_Truck_3,mode_0,mode_1,mode_2,mode_3};
+
+
 
 //---------------- LOOK UP TABLE-----------------
 const uint8_t * const res_table_1[] PROGMEM = {
@@ -305,15 +338,28 @@ const uint8_t * const res_table_1[] PROGMEM = {
     res_2923_02_1, //---- Bandagenentspannung --- 22
     res_2414_02_1, //---- Lenkübersetzung --- 23
     res_2461_02_1, //---- Status --- 24
-    res_2405_02_1, //---- Sollwertgeber ---- 25
-    res_2402_02_1, //---- Istwertgeber ---- 26
+    res_2405_02_1, //---- SollLenkwinkel ---- 25
+    res_2402_02_1, //---- IstLenkwinkel Link ---- 26
 
     res_2001_02_1, //--- Logbuch sollindex --- 27
     res_2001_03_1, //--- Logbuch IstIndex --- 28
     res_2411_02_1, //--- Kennlinie --- 29
 
-    res_2405_07_1, //--- Sollwertgeber 07 --- 30
-    res_2460_02_1, //--- Istwertgeber 02 --- 31
+    res_2405_07_1, //--- SollLenkwinkel 07 --- 30
+    res_2460_02_1, //--- Status Lenken --- 31
+
+    res_2404_02_1, //---- SollLenkwinkel Recht ---- 32
+    res_2401_02_1, //---- IstLenkwinkel Recht ---- 33
+
+    res_2403_02_1, //---- SollLenkwinkel Null ---- 34
+    
+
+    res_2400_02_1, //---- IstLenkwinkel Null non teach---- 35
+    res_2403_07_1, //---- Min IstLenkwinkel Null teach--- 36
+    res_2404_07_1, //---- Min IstLenkwinkel Recht teach--- 37
+    
+   
+
 };
 
 
@@ -341,8 +387,10 @@ enum RUN_MODE {
 
 enum RUN_STATE {
     STATE_WELCOME,
-    STATE_SELECT,
+    STATE_SELECT_TRUCK,
+    STATE_SELECT_MODE,
     STATE_RUN,
+    STATE_DEMO,
 };
 
 struct answer {
@@ -376,8 +424,10 @@ public:
     String segmented_res_Fahrzeug_Name[5];
 
     // For initialization
+    
+    
     __u8 selected_Truck;
-
+    
     
     // Object DATA
     __u8 loiTruck_Seri0;
@@ -393,14 +443,33 @@ public:
     __u8 loiTruck_Lenken_Ubersetzung;   // 
     __u8 loiTruck_Lenken_Status_0;      // 2461
     __u8 loiTruck_Lenken_Status_1;      // 2461
-    __u8 loiTruck_Lenken_Sollwertgeber_0; // 2405  soll lenkwinkel link
-    __u8 loiTruck_Lenken_Sollwertgeber_1; // 2405  soll lenkwinkel link
-    __u8 loiTruck_Lenken_Istwertgeber_0;  // 2402  is lenkwinkel link   
-    __u8 loiTruck_Lenken_Istwertgeber_1;  // 2402  is lenkwinkel link   
+
+    __u8 loiTruck_Lenken_SollLenkwinkel_Link_0; // 2405  soll lenkwinkel link
+    __u8 loiTruck_Lenken_SollLenkwinkel_Link_1; // 2405  soll lenkwinkel link
+    
+    __u8 loiTruck_Lenken_SollLenkwinkel_Recht_0; // 2405  soll lenkwinkel link
+    __u8 loiTruck_Lenken_SollLenkwinkel_Recht_1; // 2405  soll lenkwinkel link
+
+    __u8 loiTruck_Lenken_SollLenkwinkel_Null_0; // 2405  soll lenkwinkel link
+    __u8 loiTruck_Lenken_SollLenkwinkel_Null_1; // 2405  soll lenkwinkel link
+    
+    __u8 loiTruck_Lenken_IstLenkwinkel_Link_0;  // 2402  is lenkwinkel link   
+    __u8 loiTruck_Lenken_IstLenkwinkel_Link_1;  // 2402  is lenkwinkel link   
+    
+    __u8 loiTruck_Lenken_IstLenkwinkel_Recht_0;  // 2401  is lenkwinkel recht   
+    __u8 loiTruck_Lenken_IstLenkwinkel_Recht_1;  // 2401  is lenkwinkel recht  
+
+    __u8 loiTruck_Lenken_IstLenkwinkel_Null_0;  // 2402  is lenkwinkel link   
+    __u8 loiTruck_Lenken_IstLenkwinkel_Null_1;  // 2402  is lenkwinkel link   
+    
     __u8 loiTruck_Lenken_Kennlinie;     // 2411 
 
     __u8 loiTruck_Logbuch_SavedIndx;
     
+    // HARDWARE
+    Servo _servo;
+    int last_Servo_Pos;
+
 
     enum ERROR {
         ERROR_OK = 0,
@@ -409,7 +478,7 @@ public:
     };
 
     // Constructor
-    LOITRUCK(RUN_MODE runMode) {
+    LOITRUCK(RUN_MODE runMode, Servo servo) {
         _runMode = runMode;
         _runState = STATE_WELCOME;
         _mousePos = 2;
@@ -429,22 +498,59 @@ public:
         loiTruck_Lenken_Zeit_Einfall = 0x01;    // maximum 9 *10 in second
         loiTruck_Lenken_Ubersetzung = 0x32;  // 50 -> 5 revolution for 180 grad
         
-        loiTruck_Lenken_Status_0 = 0x22;    // Nullstellung
-        loiTruck_Lenken_Status_1 = 0x22;    // Nullstellung 0x1111
+        loiTruck_Lenken_Status_0 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Status_1 = 0x00;    // Teach in fertig
 
-        loiTruck_Lenken_Istwertgeber_0 = 0x22;  // 2402 Max
-        loiTruck_Lenken_Istwertgeber_1 = 0x22;  // 2402 Max
+        /*
+        loiTruck_Lenken_Min_SollLenkwinkel_Link_0 = 0x05;  // 2402 Max 07
+        loiTruck_Lenken_Min_SollLenkwinkel_Link_1 = 0x04;  // 2402 Max 07
 
-        loiTruck_Lenken_Sollwertgeber_0 = 0x11; // 2405 Max
-        loiTruck_Lenken_Sollwertgeber_1 = 0x11; // 2405 Max
+        loiTruck_Lenken_Max_SollLenkwinkel_Link_0 = 0x05;  // 2402 Max 08
+        loiTruck_Lenken_Max_SollLenkwinkel_Link_1 = 0x04;  // 2402 Max 08
+        */
+
+        loiTruck_Lenken_IstLenkwinkel_Link_0 = 0x05;  // 2402 Max
+        loiTruck_Lenken_IstLenkwinkel_Link_1 = 0x04;  // 2402 Max
+
+        loiTruck_Lenken_SollLenkwinkel_Link_0 = 0xDB; // 2405 Max
+        loiTruck_Lenken_SollLenkwinkel_Link_1 = 0xDB; // 2405 Max
+
+        /*
+        loiTruck_Lenken_Min_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
+        loiTruck_Lenken_Min_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
+
+        loiTruck_Lenken_Max_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
+        loiTruck_Lenken_Max_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
+        */
+
+        loiTruck_Lenken_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
+        loiTruck_Lenken_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
+
+        loiTruck_Lenken_SollLenkwinkel_Recht_0 = 0x09; // 2404 Max
+        loiTruck_Lenken_SollLenkwinkel_Recht_1 = 0x10; // 2404 Max
+
+        /*
+        loiTruck_Lenken_Min_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
+        loiTruck_Lenken_Min_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
+        
+        loiTruck_Lenken_Max_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
+        loiTruck_Lenken_Max_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
+        */
+
+        loiTruck_Lenken_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
+        loiTruck_Lenken_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
+
+        loiTruck_Lenken_SollLenkwinkel_Null_0 = 0xB7; // 2403 Max
+        loiTruck_Lenken_SollLenkwinkel_Null_1 = 0xF7; // 2403 Max
 
         loiTruck_Lenken_Kennlinie = 0x06;   // follow Noris excel
 
         // Logbuch
         loiTruck_Logbuch_SavedIndx = 0x00;
 
-        // assign selected truck (later via lcd and joystick)
-        selected_Truck = 1;     // ECE2252015
+        // assign Servo motor
+        _servo = servo;
+        this->last_Servo_Pos = 0;
     };
 
     // FUNCTION
@@ -454,21 +560,22 @@ public:
     void create_CAN_Segmented_map();
     bool check_Segmented(can_frame _toTest);
     
-    can_frame get_Segmented_Response();
-    can_frame get_Expedited_Response(can_frame _toGet);
+    can_frame get_Segmented_Response(LiquidCrystal_I2C lcd);
+    can_frame get_Expedited_Response(can_frame _toGet, LiquidCrystal_I2C lcd);
     
     void create_segmented_res_Fahrzeug_Name();
     void set_expecting_Segmented_Req(int count);
     void initial_Segmented_Transmit(can_frame receive_frame);
     void finalise_Segmented_Transmit();
     
-    bool actuator(can_frame req_frame);
+    bool actuator(can_frame req_frame, LiquidCrystal_I2C lcd);
     answer prepare_Answer(can_frame req, int indx_subindx);
     bool create_map();
+    void actuate_servo(int minPot, int maxPot);
 
     // HARDWARE
     bool display_LCD(LiquidCrystal_I2C lcd);
-    bool modify_after_joystick(int mapx, int mapy, int clicked);
+    bool modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrystal_I2C lcd);
     void demo_test();
 };
 
