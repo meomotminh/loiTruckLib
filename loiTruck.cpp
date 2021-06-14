@@ -40,7 +40,7 @@ bool LOITRUCK::create_map()
     int i = 0;
     Serial.print("Selected Truck "); Serial.println(this->selected_Truck);
     switch (this->selected_Truck) {
-        case 2: // ECE2252015
+        case 2: // ECE2252015 only existing Fahrzeug
             temp.insert(std::pair<int, int>(20001,i++));
             temp.insert(std::pair<int, int>(20003,i++));
             temp.insert(std::pair<int, int>(20011,i++));
@@ -535,7 +535,47 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx)
                         to_Return.data3 = 0x00;                  
                         break;
 
+                    case 38: //---- Min value lenken---
+                        to_Return.data0 = this->loiTruck_Lenken_Min_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Min_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 39: //---- Min value lenken---
+                        to_Return.data0 = this->loiTruck_Lenken_Min_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Min_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
                     
+                    case 40: //---- Min value lenken---
+                        to_Return.data0 = this->loiTruck_Lenken_Min_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Min_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                                          
+                        break;
+
+                    case 41: //---- Max value lenken---
+                        to_Return.data0 = this->loiTruck_Lenken_Max_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Max_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+
+                    case 42: //---- Max value lenken---
+                        to_Return.data0 = this->loiTruck_Lenken_Max_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Max_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                  
+                        break;
+                    
+                    case 43: //---- Max value lenken---
+                        to_Return.data0 = this->loiTruck_Lenken_Max_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Max_1;
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                                          
+                        break;
 
                     default:                        
                         break;
@@ -556,7 +596,7 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write serial nummer
     if (command_id == 0x23 && req_frame.data[1] == 0x02 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x01)
     {   
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         this->loiTruck_Seri0 = req_frame.data[4];
         this->loiTruck_Seri1 = req_frame.data[5];
@@ -566,7 +606,7 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write betrieb zeit
     else if (command_id == 0x2b && req_frame.data[1] == 0x20 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x01)
     {   
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         this->loiTruck_Zeit0 = req_frame.data[4];
         this->loiTruck_Zeit1 = req_frame.data[5];        
@@ -574,7 +614,7 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write lenkkorrektur 0x2413
     else if (command_id == 0x2b && req_frame.data[1] == 0x13 && req_frame.data[2] == 0x24 && req_frame.data[3] == 0x02)
     {   
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         //Serial.println("Write Lenkkorrektur");
         this->loiTruck_Lenken_Korrektur = req_frame.data[4];
@@ -582,7 +622,7 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write bandagenentspannung 0x2923
     else if (command_id == 0x2b && req_frame.data[1] == 0x23 && req_frame.data[2] == 0x29 && req_frame.data[3] == 0x02)
     {   
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         //Serial.println("Write Bandagenentspannung");
         this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4];        
@@ -590,7 +630,7 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write Lenkübersetzung 0x2414
     else if (command_id == 0x2b && req_frame.data[1] == 0x14 && req_frame.data[2] == 0x24 && req_frame.data[3] == 0x02)
     {   
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         //Serial.println("Write Lenkübersetzung");
         this->loiTruck_Lenken_Ubersetzung = req_frame.data[4];        
@@ -598,7 +638,7 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write Logbuch 0x2001
     else if (command_id == 0x2f && req_frame.data[1] == 0x01 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x02)
     {
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         //Serial.println("Write Logbuch");
         this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
@@ -606,10 +646,60 @@ bool LOITRUCK::actuator(can_frame req_frame, LiquidCrystal_I2C lcd)
     // write Sollwertgeber 0x2405
     else if (command_id == 0x2f && req_frame.data[1] == 0x01 && req_frame.data[2] == 0x20 && req_frame.data[3] == 0x02)
     {
-        lcd.setCursor(2,0);
+        lcd.setCursor(2,1);
         lcd.print(create_str_from_frame(req_frame));
         //Serial.println("Write Logbuch");
         this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
+    }
+    // start teach-in
+    else if (command_id == 0x23 && req_frame.data[1] == 0x12 && req_frame.data[2] == 0x20 && req_frame.data[4] == 0x6c && req_frame.data[5] == 0x6f && req_frame.data[6] == 0x61 && req_frame.data[7] == 0x64)  // LOAD
+    {
+        lcd.setCursor(2,1);
+        lcd.print("set lenken load");
+        this->loiTruck_lenken_load = true;
+    }
+    else if (command_id == 0x23 && req_frame.data[1] == 0x10 && req_frame.data[2] == 0x10 && req_frame.data[4] == 0x73 && req_frame.data[5] == 0x61 && req_frame.data[6] == 0x76 && req_frame.data[7] == 0x65)  // SAVE
+    {
+        lcd.setCursor(2,1);
+        lcd.print("set lenken save");
+        this->loiTruck_lenken_save = true;
+    }
+    else if (command_id == 0x23 && req_frame.data[1] == 0x03 && req_frame.data[2] == 0x24 && req_frame.data[4] == 0x73 && req_frame.data[5] == 0x61 && req_frame.data[6] == 0x76 && req_frame.data[7] == 0x65)  // SAVE NULL
+    {
+        lcd.setCursor(2,1);
+        lcd.print("set lenken save null");
+        this->loiTruck_lenken_save_null = true; 
+    }
+    else if (command_id == 0x23 && req_frame.data[1] == 0x04 && req_frame.data[2] == 0x24 && req_frame.data[4] == 0x73 && req_frame.data[5] == 0x61 && req_frame.data[6] == 0x76 && req_frame.data[7] == 0x65)  // SAVE Recht
+    {
+        lcd.setCursor(2,1);
+        lcd.print("set lenken save recht");
+        this->loiTruck_lenken_save_recht = true; 
+    }
+    else if (command_id == 0x23 && req_frame.data[1] == 0x05 && req_frame.data[2] == 0x24 && req_frame.data[4] == 0x73 && req_frame.data[5] == 0x61 && req_frame.data[6] == 0x76 && req_frame.data[7] == 0x65)  // SAVE link
+    {
+        lcd.setCursor(2,1);
+        lcd.print("set lenken save link");
+        this->loiTruck_lenken_save_link = true; 
+    }
+
+
+    // actuatate state lenken
+    if ((this->loiTruck_lenken_load) && (this->loiTruck_lenken_save))
+    {
+        this->loiTruck_Lenken_Status_0 = 0x00;
+        this->loiTruck_Lenken_Status_1 = 0x00; // not available for teach in
+        this->loiTruck_lenken_load = false;
+        this->loiTruck_lenken_save = false;
+    }
+
+    if ((this->loiTruck_lenken_save_link) && (this->loiTruck_lenken_save_null) && (this->loiTruck_lenken_save_recht))
+    {
+        this->loiTruck_Lenken_Status_0 = 0x77;
+        this->loiTruck_Lenken_Status_1 = 0x77; // available for teach in
+        this->loiTruck_lenken_save_null = false;
+        this->loiTruck_lenken_save_link = false;
+        this->loiTruck_lenken_save_recht = false;
     }
     return true;
 }
@@ -632,40 +722,37 @@ void LOITRUCK::actuate_servo(int minPot, int maxPot)
 
         if ( servoWrite > 85 && servoWrite < 95)    // Mitte
         {
-            this->loiTruck_Lenken_SollLenkwinkel_Null_0 = secondByte;
-            this->loiTruck_Lenken_SollLenkwinkel_Null_1 = firstByte;
-            this->loiTruck_Lenken_IstLenkwinkel_Null_0 = secondByte;
-            this->loiTruck_Lenken_IstLenkwinkel_Null_1 = firstByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Null_0 = firstByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Null_1 = secondByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Null_0 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Null_1 = secondByte;
 
-            this->loiTruck_Lenken_Status_0 = 0x11;
-            this->loiTruck_Lenken_Status_1 = 0x11;
+            //this->loiTruck_Lenken_Status_0 = 0x11;
+            //this->loiTruck_Lenken_Status_1 = 0x11;
         } else if (servoWrite < 80) // Left
         {
-            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = secondByte;
-            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = firstByte;
-            this->loiTruck_Lenken_IstLenkwinkel_Link_0 = secondByte;
-            this->loiTruck_Lenken_IstLenkwinkel_Link_1 = firstByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = firstByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = secondByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Link_0 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Link_1 = secondByte;
 
-            this->loiTruck_Lenken_Status_0 = 0x22;
-            this->loiTruck_Lenken_Status_1 = 0x22;
+            //this->loiTruck_Lenken_Status_0 = 0x22;
+            //this->loiTruck_Lenken_Status_1 = 0x22;
 
         } else if (servoWrite > 100)
         {
-            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = secondByte;
-            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = firstByte;
-            this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = secondByte;
-            this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = firstByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = firstByte;
+            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = secondByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = secondByte;
 
-            this->loiTruck_Lenken_Status_0 = 0x44;
-            this->loiTruck_Lenken_Status_1 = 0x44;
+            //this->loiTruck_Lenken_Status_0 = 0x44;
+            //this->loiTruck_Lenken_Status_1 = 0x44;
         }
     
 
 
         this->_servo.write(servoWrite);
-    } else {
-        this->loiTruck_Lenken_Status_0 = 0x77;
-        this->loiTruck_Lenken_Status_1 = 0x77;
     }
 
     this->last_Servo_Pos = val;
@@ -771,7 +858,6 @@ void LOITRUCK::demo_test()
         if (i < 4){_outServo += 45;}
         else {_outServo -= 45;}
     }
-
 }
 
 
@@ -890,20 +976,21 @@ void LOITRUCK::create_segmented_res_Fahrzeug_Name()
 
 void LOITRUCK::set_expecting_Segmented_Req(int count){
     __u8 data[8];
-    if (count == 0){
+    if (count == 1){
         assign_arr(data, 0x60, this->receive_Segment_Req.data[1], this->receive_Segment_Req.data[2], this->receive_Segment_Req.data[3], this->receive_Segment_Req.data[4], this->receive_Segment_Req.data[5], this->receive_Segment_Req.data[6], this->receive_Segment_Req.data[7]);
         
     } else {
         // toggle bit 60 - 70
-        __u8 toggle_bit = (this->receive_Segment_Req.data[0]) ^ (0x10); // XOR 
+        __u8 toggle_bit = (this->expecting_Segment_frame.data[0]) ^ (0x10); // XOR 
+
         assign_arr(data, toggle_bit, this->receive_Segment_Req.data[1], this->receive_Segment_Req.data[2], this->receive_Segment_Req.data[3], this->receive_Segment_Req.data[4], this->receive_Segment_Req.data[5], this->receive_Segment_Req.data[6], this->receive_Segment_Req.data[7]);
     }
-    this->expecting_Segment_frame = create_CAN_frame(0x581, 8, data);
+    this->expecting_Segment_frame = create_CAN_frame(this->receive_Segment_Req.can_id, 8, data);
 }
 
-can_frame LOITRUCK::get_Segmented_Response(LiquidCrystal_I2C lcd)
+can_frame LOITRUCK::get_Segmented_Response(can_frame req, LiquidCrystal_I2C lcd)
 {
-        
+    String reqstr, expect_str;    
     String tempstr;
     can_frame toReturn;
 
@@ -914,23 +1001,19 @@ can_frame LOITRUCK::get_Segmented_Response(LiquidCrystal_I2C lcd)
         std::map<String,String>::const_iterator it = this->CAN_Segmented_Map.find(temp);
         tempstr = it->second;
     } else {
-        tempstr = this->segmented_res_Fahrzeug_Name[this->count_segmented - 1];                // because not include the 1st response
+        tempstr = this->segmented_res_Fahrzeug_Name[this->count_segmented - 1];                // because not include the 1st response            
     }
+        
+        toReturn = create_frame_from_str(tempstr);
+        this->count_segmented++;
 
-    //lcd.setCursor(2,0);
-    //lcd.print("Res ");lcd.print(tempstr);
-
-  
-    toReturn = create_frame_from_str(tempstr);
-    this->count_segmented++;
-
-    // if more than 5 then finalise
-    if (this->count_segmented == 6){            // 5 + 1st response
-        this->finalise_Segmented_Transmit();
-    } else {
-        this->set_expecting_Segmented_Req(this->count_segmented);
-    }
-    
+        // if more than 5 then finalise
+        if (this->count_segmented == 6){            // 5 + 1st response
+            this->finalise_Segmented_Transmit();
+        } else {
+            this->set_expecting_Segmented_Req(this->count_segmented);
+        }        
+        
     return toReturn;
 }
 
@@ -992,19 +1075,36 @@ void LOITRUCK::initial_Segmented_Transmit(can_frame receive_frame){
 
     // set receive_Segment_Req and expecting_Segmented_req
     this->receive_Segment_Req = receive_frame;    
+
+    
 }
 
 // Check if RESPONSE is SEGMENTED
 bool LOITRUCK::check_Segmented(can_frame _toTest)
 {
     String temp = create_str_from_frame(_toTest);
+    String tempstr = create_str_from_frame(this->expecting_Segment_frame);
+
     
+
     std::map<String,String>::const_iterator it = this->CAN_Segmented_Map.find(temp);
     if (it != this->CAN_Segmented_Map.end()){
         // if is Segmented then initialize
+        Serial.println("IS SEGMENTED");
         this->initial_Segmented_Transmit(_toTest);        
         return true;
-    } else return false;    
+    } else {
+        // if not found in map then mayby second
+            
+        if (temp == tempstr){
+            Serial.println("IS SEGMENTED");
+            return true;    
+        } else {
+            Serial.println("NOT SEGMENTED");
+            return false;    
+        }
+        
+    }
 }
 
 

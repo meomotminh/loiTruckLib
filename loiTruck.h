@@ -282,6 +282,12 @@ const PROGMEM uint8_t res_2400_02_1[]  = {}; //---- IstLenkwinkel Null not teach
 const PROGMEM uint8_t res_2403_07_1[]  = {}; //---- Min IstLenkwinkel Null teach---
 const PROGMEM uint8_t res_2404_07_1[]  = {}; //---- Min IstLenkwinkel Recht teach---
 
+const PROGMEM uint8_t res_2405_03_1[]  = {}; //---- Min value lenken
+const PROGMEM uint8_t res_2404_03_1[]  = {}; //---- Min value lenken
+const PROGMEM uint8_t res_2403_03_1[]  = {}; //---- Min value lenken
+const PROGMEM uint8_t res_2405_04_1[]  = {}; //---- Max value lenken
+const PROGMEM uint8_t res_2404_04_1[]  = {}; //---- Max value lenken
+const PROGMEM uint8_t res_2403_04_1[]  = {}; //---- Max value lenken
 
 
 
@@ -359,7 +365,12 @@ const uint8_t * const res_table_1[] PROGMEM = {
     res_2404_07_1, //---- Min IstLenkwinkel Recht teach--- 37
     
    
-
+    res_2405_03_1, //---- Min value lenken --- 38
+    res_2404_03_1, //---- Min value lenken --- 39
+    res_2403_03_1, //---- Min value lenken --- 40
+    res_2405_04_1, //---- Max value lenken --- 41
+    res_2404_04_1, //---- Max value lenken --- 42
+    res_2403_04_1, //---- Max value lenken --- 43
 };
 
 
@@ -446,12 +457,19 @@ public:
 
     __u8 loiTruck_Lenken_SollLenkwinkel_Link_0; // 2405  soll lenkwinkel link
     __u8 loiTruck_Lenken_SollLenkwinkel_Link_1; // 2405  soll lenkwinkel link
+  
+    __u8 loiTruck_Lenken_Min_0; // 2405,4,3 3 min link
+    __u8 loiTruck_Lenken_Min_1; // 2405,4,3 3 min link
+    __u8 loiTruck_Lenken_Max_0; // 2405,4,3 4 max link
+    __u8 loiTruck_Lenken_Max_1; // 2405,4,3 4 max link
     
-    __u8 loiTruck_Lenken_SollLenkwinkel_Recht_0; // 2405  soll lenkwinkel link
-    __u8 loiTruck_Lenken_SollLenkwinkel_Recht_1; // 2405  soll lenkwinkel link
+    __u8 loiTruck_Lenken_SollLenkwinkel_Recht_0; // 2404  soll lenkwinkel recht
+    __u8 loiTruck_Lenken_SollLenkwinkel_Recht_1; // 2404  soll lenkwinkel recht
+    
 
-    __u8 loiTruck_Lenken_SollLenkwinkel_Null_0; // 2405  soll lenkwinkel link
-    __u8 loiTruck_Lenken_SollLenkwinkel_Null_1; // 2405  soll lenkwinkel link
+    __u8 loiTruck_Lenken_SollLenkwinkel_Null_0; // 2405  soll lenkwinkel null
+    __u8 loiTruck_Lenken_SollLenkwinkel_Null_1; // 2405  soll lenkwinkel null
+    
     
     __u8 loiTruck_Lenken_IstLenkwinkel_Link_0;  // 2402  is lenkwinkel link   
     __u8 loiTruck_Lenken_IstLenkwinkel_Link_1;  // 2402  is lenkwinkel link   
@@ -465,6 +483,15 @@ public:
     __u8 loiTruck_Lenken_Kennlinie;     // 2411 
 
     __u8 loiTruck_Logbuch_SavedIndx;
+
+    // Lenken status
+    // -------to set status 0x0000-------
+    bool loiTruck_lenken_load;
+    bool loiTruck_lenken_save;
+    // -------to set status 0x7777-------
+    bool loiTruck_lenken_save_null;
+    bool loiTruck_lenken_save_link;
+    bool loiTruck_lenken_save_recht;
     
     // HARDWARE
     Servo _servo;
@@ -498,8 +525,8 @@ public:
         loiTruck_Lenken_Zeit_Einfall = 0x01;    // maximum 9 *10 in second
         loiTruck_Lenken_Ubersetzung = 0x32;  // 50 -> 5 revolution for 180 grad
         
-        loiTruck_Lenken_Status_0 = 0x00;    // Teach in fertig
-        loiTruck_Lenken_Status_1 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Status_0 = 0x77;    // Teach in fertig
+        loiTruck_Lenken_Status_1 = 0x77;    // Teach in fertig
 
         /*
         loiTruck_Lenken_Min_SollLenkwinkel_Link_0 = 0x05;  // 2402 Max 07
@@ -543,6 +570,11 @@ public:
         loiTruck_Lenken_SollLenkwinkel_Null_0 = 0xB7; // 2403 Max
         loiTruck_Lenken_SollLenkwinkel_Null_1 = 0xF7; // 2403 Max
 
+        loiTruck_Lenken_Min_0 = 0x00; // 2405,4,3 3 min link
+        loiTruck_Lenken_Min_1 = 0x00; // 2405,4,3 3 min link
+        loiTruck_Lenken_Max_0 = 0xFF; // 2405,4,3 4 max link
+        loiTruck_Lenken_Max_1 = 0xFF; // 2405,4,3 4 max link
+
         loiTruck_Lenken_Kennlinie = 0x06;   // follow Noris excel
 
         // Logbuch
@@ -560,7 +592,7 @@ public:
     void create_CAN_Segmented_map();
     bool check_Segmented(can_frame _toTest);
     
-    can_frame get_Segmented_Response(LiquidCrystal_I2C lcd);
+    can_frame get_Segmented_Response(can_frame req, LiquidCrystal_I2C lcd);
     can_frame get_Expedited_Response(can_frame _toGet, LiquidCrystal_I2C lcd);
     
     void create_segmented_res_Fahrzeug_Name();
