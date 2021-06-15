@@ -289,6 +289,23 @@ const PROGMEM uint8_t res_2405_04_1[]  = {}; //---- Max value lenken
 const PROGMEM uint8_t res_2404_04_1[]  = {}; //---- Max value lenken
 const PROGMEM uint8_t res_2403_04_1[]  = {}; //---- Max value lenken
 
+const PROGMEM uint8_t res_2402_07_1[]  = {}; //---- Ist Teach-In Link
+const PROGMEM uint8_t res_2401_07_1[]  = {}; //---- Ist Teach-In Recht 
+const PROGMEM uint8_t res_2400_07_1[]  = {}; //---- Ist Teach-In Null
+
+//---------------Command Name-----------------
+const PROGMEM uint8_t req_23_2002_01_1[]  = {}; //----- Write serial nummer
+const PROGMEM uint8_t req_2b_2020_01_1[]  = {}; //----- Write betriebszeit
+const PROGMEM uint8_t req_2b_2413_02_1[]  = {}; //----- Write lenkkorrektur
+const PROGMEM uint8_t req_2b_2923_02_1[]  = {}; //----- Write bandagenentspannung
+const PROGMEM uint8_t req_2b_2414_02_1[]  = {}; //----- Write Lenkübersetzung
+const PROGMEM uint8_t req_2f_2001_02_1[]  = {}; //----- Write logbuch---
+const PROGMEM uint8_t req_23_2012_LOAD_1[] = {}; //----- start teach-in
+const PROGMEM uint8_t req_23_1010_SAVE_1[] = {}; //----- save in teach-in
+const PROGMEM uint8_t req_23_2403_SAVE_1[] = {}; //----- save null
+const PROGMEM uint8_t req_23_2404_SAVE_1[] = {}; //----- save recht
+const PROGMEM uint8_t req_23_2405_SAVE_1[] = {}; //----- save link
+
 
 
 //---------------------String for LCD---------------------------------
@@ -361,8 +378,8 @@ const uint8_t * const res_table_1[] PROGMEM = {
     
 
     res_2400_02_1, //---- IstLenkwinkel Null non teach---- 35
-    res_2403_07_1, //---- Min IstLenkwinkel Null teach--- 36
-    res_2404_07_1, //---- Min IstLenkwinkel Recht teach--- 37
+    res_2403_07_1, //---- Poti IstLenkwinkel Null teach--- 36
+    res_2404_07_1, //---- Poti IstLenkwinkel Recht teach--- 37
     
    
     res_2405_03_1, //---- Min value lenken --- 38
@@ -371,7 +388,40 @@ const uint8_t * const res_table_1[] PROGMEM = {
     res_2405_04_1, //---- Max value lenken --- 41
     res_2404_04_1, //---- Max value lenken --- 42
     res_2403_04_1, //---- Max value lenken --- 43
+
+    res_2402_07_1, //---- Ist Teach-In Link--- 44
+    res_2401_07_1, //---- Ist Teach-In Recht---45 
+    res_2400_07_1, //---- Ist Teach-In Null---46
+
+    req_23_2002_01_1, //----- 47
+    req_2b_2020_01_1, //----- 48
+    req_2b_2413_02_1, //----- 49
+    req_2b_2923_02_1, //----- 50
+    req_2b_2414_02_1, //----- 51
+    req_2f_2001_02_1, //----- 52
+    req_23_2012_LOAD_1, //----- 53
+    req_23_1010_SAVE_1, //----- 54
+    req_23_2403_SAVE_1, //----- 55
+    req_23_2404_SAVE_1, //----- 56
+    req_23_2405_SAVE_1, //----- 57
 };
+
+/*
+//-----------------COMMAND TABLE-------------------
+const uint8_t * const command_table_1[] PROGMEM = {
+    req_23_2002_01_1, //----- 0
+    req_2b_2020_01_1, //----- 1
+    req_2b_2413_02_1, //----- 2
+    req_2b_2923_02_1, //----- 3
+    req_2b_2414_02_1, //----- 4
+    req_2f_2001_02_1, //----- 5
+    req_23_2012_LOAD_1, //----- 6
+    req_23_1010_SAVE_1, //----- 7
+    req_23_2403_SAVE_1, //----- 8
+    req_23_2404_SAVE_1, //----- 9
+    req_23_2405_SAVE_1, //----- 10
+};
+*/
 
 
 // UTILITY FUNCTION
@@ -384,7 +434,7 @@ void display_CAN_Frame(can_frame _toDisplay);
 __u16 prepare_ID(__u16 ID_req);
 __u8 prepare_Command_ID(can_frame req, bool end_msg);
 bool check_COB_ID_range(can_frame req);
-
+void clearLCDLine(int line, LiquidCrystal_I2C lcd);
 
 
 
@@ -419,13 +469,15 @@ public:
     RUN_MODE _runMode;
     RUN_STATE _runState;
     int _mousePos;
+    bool _1stRun;
 
     // For create map
-    std::vector<std::vector<__u8>> req_arr;
-    std::vector<std::vector<__u8>> res_arr; 
+    //std::vector<std::vector<__u8>> req_arr;
+    //std::vector<std::vector<__u8>> res_arr; 
     //std::map<String, String> CAN_Expedited_Map;
     std::map<String, String> CAN_Segmented_Map;
     std::map<int, int> CAN_Expedited_Map;
+    //std::map<int, int> CAN_Command_Map;
 
     // For segmented
     bool Segmented;
@@ -452,8 +504,12 @@ public:
     __u8 loiTruck_Lenken_Korrektur;     // 2413
     __u8 loiTruck_Lenken_Zeit_Einfall;  // Bandagenentspannung
     __u8 loiTruck_Lenken_Ubersetzung;   // 
-    __u8 loiTruck_Lenken_Status_0;      // 2461
-    __u8 loiTruck_Lenken_Status_1;      // 2461
+    
+    __u8 loiTruck_Lenken_Ist_Status_0;      // 2461
+    __u8 loiTruck_Lenken_Ist_Status_1;      // 2461
+    __u8 loiTruck_Lenken_Soll_Status_0;      // 2461
+    __u8 loiTruck_Lenken_Soll_Status_1;      // 2461
+
 
     __u8 loiTruck_Lenken_SollLenkwinkel_Link_0; // 2405  soll lenkwinkel link
     __u8 loiTruck_Lenken_SollLenkwinkel_Link_1; // 2405  soll lenkwinkel link
@@ -493,6 +549,11 @@ public:
     bool loiTruck_lenken_save_link;
     bool loiTruck_lenken_save_recht;
     
+    // Teach In Procedure
+    bool _teach_In;
+    int _count_teach_In;
+    bool _ist_teach_In;
+
     // HARDWARE
     Servo _servo;
     int last_Servo_Pos;
@@ -509,6 +570,10 @@ public:
         _runMode = runMode;
         _runState = STATE_WELCOME;
         _mousePos = 2;
+        _1stRun = false;
+        _teach_In = false;
+        _ist_teach_In = false;
+        _count_teach_In = 0;
 
         // assign Seri
         loiTruck_Seri0 = Seri0_HAPPY;
@@ -525,16 +590,11 @@ public:
         loiTruck_Lenken_Zeit_Einfall = 0x01;    // maximum 9 *10 in second
         loiTruck_Lenken_Ubersetzung = 0x32;  // 50 -> 5 revolution for 180 grad
         
-        loiTruck_Lenken_Status_0 = 0x77;    // Teach in fertig
-        loiTruck_Lenken_Status_1 = 0x77;    // Teach in fertig
+        loiTruck_Lenken_Soll_Status_0 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Soll_Status_1 = 0x00;    // Teach in fertig
 
-        /*
-        loiTruck_Lenken_Min_SollLenkwinkel_Link_0 = 0x05;  // 2402 Max 07
-        loiTruck_Lenken_Min_SollLenkwinkel_Link_1 = 0x04;  // 2402 Max 07
-
-        loiTruck_Lenken_Max_SollLenkwinkel_Link_0 = 0x05;  // 2402 Max 08
-        loiTruck_Lenken_Max_SollLenkwinkel_Link_1 = 0x04;  // 2402 Max 08
-        */
+        loiTruck_Lenken_Ist_Status_0 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Ist_Status_1 = 0x00;    // Teach in fertig
 
         loiTruck_Lenken_IstLenkwinkel_Link_0 = 0x05;  // 2402 Max
         loiTruck_Lenken_IstLenkwinkel_Link_1 = 0x04;  // 2402 Max
@@ -542,27 +602,11 @@ public:
         loiTruck_Lenken_SollLenkwinkel_Link_0 = 0xDB; // 2405 Max
         loiTruck_Lenken_SollLenkwinkel_Link_1 = 0xDB; // 2405 Max
 
-        /*
-        loiTruck_Lenken_Min_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
-        loiTruck_Lenken_Min_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
-
-        loiTruck_Lenken_Max_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
-        loiTruck_Lenken_Max_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
-        */
-
         loiTruck_Lenken_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
         loiTruck_Lenken_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
 
         loiTruck_Lenken_SollLenkwinkel_Recht_0 = 0x09; // 2404 Max
-        loiTruck_Lenken_SollLenkwinkel_Recht_1 = 0x10; // 2404 Max
-
-        /*
-        loiTruck_Lenken_Min_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
-        loiTruck_Lenken_Min_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
-        
-        loiTruck_Lenken_Max_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
-        loiTruck_Lenken_Max_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
-        */
+        loiTruck_Lenken_SollLenkwinkel_Recht_1 = 0x10; // 2404 Max        
 
         loiTruck_Lenken_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
         loiTruck_Lenken_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
@@ -573,7 +617,11 @@ public:
         loiTruck_Lenken_Min_0 = 0x00; // 2405,4,3 3 min link
         loiTruck_Lenken_Min_1 = 0x00; // 2405,4,3 3 min link
         loiTruck_Lenken_Max_0 = 0xFF; // 2405,4,3 4 max link
-        loiTruck_Lenken_Max_1 = 0xFF; // 2405,4,3 4 max link
+        loiTruck_Lenken_Max_1 = 0x00; // 2405,4,3 4 max link
+
+        loiTruck_lenken_save_link = false;
+        loiTruck_lenken_save_null = false;
+        loiTruck_lenken_save_recht = false;
 
         loiTruck_Lenken_Kennlinie = 0x06;   // follow Noris excel
 
@@ -600,9 +648,10 @@ public:
     void initial_Segmented_Transmit(can_frame receive_frame);
     void finalise_Segmented_Transmit();
     
-    bool actuator(can_frame req_frame, LiquidCrystal_I2C lcd);
-    answer prepare_Answer(can_frame req, int indx_subindx);
+    bool actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C lcd);
+    answer prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I2C lcd);
     bool create_map();
+    bool create_map_command();
     void actuate_servo(int minPot, int maxPot);
 
     // HARDWARE
