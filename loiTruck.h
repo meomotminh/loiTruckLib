@@ -536,6 +536,8 @@ public:
     __u8 loiTruck_Lenken_IstLenkwinkel_Null_0;  // 2402  is lenkwinkel link   
     __u8 loiTruck_Lenken_IstLenkwinkel_Null_1;  // 2402  is lenkwinkel link   
     
+    __u8 loiTruck_Lenken_Standard_0; // standard 255
+    __u8 loiTruck_Lenken_Werk_0;  // werk 128
     __u8 loiTruck_Lenken_Kennlinie;     // 2411 
 
     __u8 loiTruck_Logbuch_SavedIndx;
@@ -553,6 +555,7 @@ public:
     bool _teach_In;
     int _count_teach_In;
     bool _ist_teach_In;
+    long _last_saved_time;
 
     // HARDWARE
     Servo _servo;
@@ -590,34 +593,37 @@ public:
         loiTruck_Lenken_Zeit_Einfall = 0x01;    // maximum 9 *10 in second
         loiTruck_Lenken_Ubersetzung = 0x32;  // 50 -> 5 revolution for 180 grad
         
-        loiTruck_Lenken_Soll_Status_0 = 0x00;    // Teach in fertig
-        loiTruck_Lenken_Soll_Status_1 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Soll_Status_0 = 0x77;    // Teach in fertig
+        loiTruck_Lenken_Soll_Status_1 = 0x77;    // Teach in fertig
 
-        loiTruck_Lenken_Ist_Status_0 = 0x00;    // Teach in fertig
-        loiTruck_Lenken_Ist_Status_1 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Ist_Status_0 = 0x77;    // Teach in fertig
+        loiTruck_Lenken_Ist_Status_1 = 0x77;    // Teach in fertig
 
-        loiTruck_Lenken_IstLenkwinkel_Link_0 = 0x05;  // 2402 Max
-        loiTruck_Lenken_IstLenkwinkel_Link_1 = 0x04;  // 2402 Max
+        loiTruck_Lenken_IstLenkwinkel_Link_0 = 0x11;  // 2402 Max
+        loiTruck_Lenken_IstLenkwinkel_Link_1 = 0x00;  // 2402 Max
 
-        loiTruck_Lenken_SollLenkwinkel_Link_0 = 0xDB; // 2405 Max
-        loiTruck_Lenken_SollLenkwinkel_Link_1 = 0xDB; // 2405 Max
+        loiTruck_Lenken_SollLenkwinkel_Link_0 = 0x11; // 2405 Max
+        loiTruck_Lenken_SollLenkwinkel_Link_1 = 0x00; // 2405 Max
 
-        loiTruck_Lenken_IstLenkwinkel_Recht_0 = 0x89;  // 2401 Max
-        loiTruck_Lenken_IstLenkwinkel_Recht_1 = 0x29;  // 2401 Max
+        loiTruck_Lenken_IstLenkwinkel_Recht_0 = 0x11;  // 2401 Max
+        loiTruck_Lenken_IstLenkwinkel_Recht_1 = 0x00;  // 2401 Max
 
-        loiTruck_Lenken_SollLenkwinkel_Recht_0 = 0x09; // 2404 Max
-        loiTruck_Lenken_SollLenkwinkel_Recht_1 = 0x10; // 2404 Max        
+        loiTruck_Lenken_SollLenkwinkel_Recht_0 = 0x11; // 2404 Max
+        loiTruck_Lenken_SollLenkwinkel_Recht_1 = 0x00; // 2404 Max        
 
-        loiTruck_Lenken_IstLenkwinkel_Null_0 = 0xDA;  // 2400 Max
-        loiTruck_Lenken_IstLenkwinkel_Null_1 = 0xDE;  // 2400 Max
+        loiTruck_Lenken_IstLenkwinkel_Null_0 = 0x11;  // 2400 Max
+        loiTruck_Lenken_IstLenkwinkel_Null_1 = 0x00;  // 2400 Max
 
-        loiTruck_Lenken_SollLenkwinkel_Null_0 = 0xB7; // 2403 Max
-        loiTruck_Lenken_SollLenkwinkel_Null_1 = 0xF7; // 2403 Max
+        loiTruck_Lenken_SollLenkwinkel_Null_0 = 0x11; // 2403 Max
+        loiTruck_Lenken_SollLenkwinkel_Null_1 = 0x00; // 2403 Max
 
         loiTruck_Lenken_Min_0 = 0x00; // 2405,4,3 3 min link
         loiTruck_Lenken_Min_1 = 0x00; // 2405,4,3 3 min link
         loiTruck_Lenken_Max_0 = 0xFF; // 2405,4,3 4 max link
         loiTruck_Lenken_Max_1 = 0x00; // 2405,4,3 4 max link
+
+        loiTruck_Lenken_Standard_0 = 0xFF; // standard 255
+        loiTruck_Lenken_Werk_0 = 0x80;  // werk 128
 
         loiTruck_lenken_save_link = false;
         loiTruck_lenken_save_null = false;
