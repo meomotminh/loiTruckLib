@@ -74,7 +74,7 @@
 
     // logbuch
     enum LOGBUCH : uint8_t {
-        no_Antrag_Log = 0x0C, // 9 gultig antrag
+        no_Antrag_Log = 0x05, // 9 gultig antrag
     };
 
     // beschleunigung
@@ -600,19 +600,19 @@ public:
         loiTruck_Lenken_Ist_Status_0 = 0x77;    // Teach in fertig
         loiTruck_Lenken_Ist_Status_1 = 0x77;    // Teach in fertig
 
-        loiTruck_Lenken_IstLenkwinkel_Link_0 = 0x22;  // 2402 Max
+        loiTruck_Lenken_IstLenkwinkel_Link_0 = 0x11;  // 2402 Max
         loiTruck_Lenken_IstLenkwinkel_Link_1 = 0x00;  // 2402 Max
 
         loiTruck_Lenken_SollLenkwinkel_Link_0 = 0x11; // 2405 Max
         loiTruck_Lenken_SollLenkwinkel_Link_1 = 0x00; // 2405 Max
 
-        loiTruck_Lenken_IstLenkwinkel_Recht_0 = 0x22;  // 2401 Max
+        loiTruck_Lenken_IstLenkwinkel_Recht_0 = 0x11;  // 2401 Max
         loiTruck_Lenken_IstLenkwinkel_Recht_1 = 0x00;  // 2401 Max
 
         loiTruck_Lenken_SollLenkwinkel_Recht_0 = 0x11; // 2404 Max
         loiTruck_Lenken_SollLenkwinkel_Recht_1 = 0x00; // 2404 Max        
 
-        loiTruck_Lenken_IstLenkwinkel_Null_0 = 0x22;  // 2400 Max
+        loiTruck_Lenken_IstLenkwinkel_Null_0 = 0x11;  // 2400 Max
         loiTruck_Lenken_IstLenkwinkel_Null_1 = 0x00;  // 2400 Max
 
         loiTruck_Lenken_SollLenkwinkel_Null_0 = 0x11; // 2403 Max
