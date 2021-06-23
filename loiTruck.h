@@ -20,15 +20,28 @@
 
 
     enum SERIENUMMER : uint8_t {
-        Seri0_HAPPY = 0xC7,
-        Seri1_HAPPY = 0x8A,
-        Seri2_HAPPY = 0xA9,
-        Seri3_HAPPY = 0x00,
+        //22222222 (8)
+        Seri0_FZ2 = 0x8E,
+        Seri1_FZ2 = 0x15,
+        Seri2_FZ2 = 0x53,
+        Seri3_FZ2 = 0x01,
+        //00000000 (8)
+        Seri0_FZ0 = 0x00,
+        Seri1_FZ0 = 0x00,
+        Seri2_FZ0 = 0x00,
+        Seri3_FZ0 = 0x00,
 
-        Seri0_UNHAPPY = 0x8E,
-        Seri1_UNHAPPY = 0x15,
-        Seri2_UNHAPPY = 0x53,
-        Seri3_UNHAPPY = 0x01
+        //11111111 (8)
+        Seri0_FZ1 = 0xC7,
+        Seri1_FZ1 = 0x8A,
+        Seri2_FZ1 = 0xA9,
+        Seri3_FZ1 = 0x00,
+
+        //33333333 (8)
+        Seri0_FZ3 = 0x55,
+        Seri1_FZ3 = 0xA0,
+        Seri2_FZ3 = 0xFC,
+        Seri3_FZ3 = 0x01,
     };
 
    
@@ -432,7 +445,7 @@ String create_str_from_frame(can_frame _toConvert);
 can_frame create_frame_from_str(String _toConvert);
 void display_CAN_Frame(can_frame _toDisplay);
 __u16 prepare_ID(__u16 ID_req);
-__u8 prepare_Command_ID(can_frame req, bool end_msg);
+
 bool check_COB_ID_range(can_frame req);
 void clearLCDLine(int line, LiquidCrystal_I2C lcd);
 
@@ -446,12 +459,21 @@ enum RUN_MODE {
     MODE_IGNORE // nicht 
 };
 
+enum APPLY_RANGE {
+    WRITE_ONLY,
+    ALL,
+};
+
+
 enum RUN_STATE {
-    STATE_WELCOME,
-    STATE_SELECT_TRUCK,
-    STATE_SELECT_MODE,
-    STATE_RUN,
-    STATE_DEMO,
+    STATE_WELCOME,      //0
+    STATE_SELECT_TRUCK, //1
+    STATE_SELECT_MODE,  //2
+    STATE_RUN,          //3
+    STATE_DEMO,         //4
+    STATE_CONFIG,       //5
+    CONFIG_SELECT_RANGE,//6
+    CONFIG_SELECT_DELAY,//7
 };
 
 struct answer {
@@ -468,8 +490,10 @@ class LOITRUCK
 public:
     RUN_MODE _runMode;
     RUN_STATE _runState;
+    APPLY_RANGE _runMode_Apply;
+    int _runMode_Delay;
     int _mousePos;
-    bool _1stRun;
+    
 
     // For create map
     //std::vector<std::vector<__u8>> req_arr;
@@ -556,6 +580,7 @@ public:
     int _count_teach_In;
     bool _ist_teach_In;
     long _last_saved_time;
+    bool ignore;
 
     // HARDWARE
     Servo _servo;
@@ -572,18 +597,17 @@ public:
     LOITRUCK(RUN_MODE runMode, Servo servo) {
         _runMode = runMode;
         _runState = STATE_WELCOME;
+        _runMode_Apply = WRITE_ONLY;
+        _runMode_Delay = 0;
+
         _mousePos = 2;
-        _1stRun = false;
+        
         _teach_In = false;
         _ist_teach_In = false;
         _count_teach_In = 0;
         _last_saved_time = 0;
-
-        // assign Seri
-        loiTruck_Seri0 = Seri0_HAPPY;
-        loiTruck_Seri1 = Seri1_HAPPY;
-        loiTruck_Seri2 = Seri2_HAPPY;
-        loiTruck_Seri3 = Seri3_HAPPY;
+        ignore = false;
+        
 
         // assign Zeit
         loiTruck_Zeit0 = zeit0;
@@ -594,8 +618,8 @@ public:
         loiTruck_Lenken_Zeit_Einfall = 0x01;    // maximum 9 *10 in second
         loiTruck_Lenken_Ubersetzung = 0x32;  // 50 -> 5 revolution for 180 grad
         
-        loiTruck_Lenken_Soll_Status_0 = 0x77;    // Teach in fertig
-        loiTruck_Lenken_Soll_Status_1 = 0x77;    // Teach in fertig
+        loiTruck_Lenken_Soll_Status_0 = 0x00;    // Teach in fertig
+        loiTruck_Lenken_Soll_Status_1 = 0x00;    // Teach in fertig
 
         loiTruck_Lenken_Ist_Status_0 = 0x77;    // Teach in fertig
         loiTruck_Lenken_Ist_Status_1 = 0x77;    // Teach in fertig
@@ -657,6 +681,7 @@ public:
     
     bool actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C lcd);
     answer prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I2C lcd);
+    __u8 prepare_Command_ID(can_frame req, bool end_msg);
     bool create_map();
     bool create_map_command();
     void actuate_servo(int minPot, int maxPot);

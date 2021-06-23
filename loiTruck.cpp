@@ -48,9 +48,8 @@ bool LOITRUCK::create_map()
 {   
     std::map<int, int> temp;
     int i = 0;
-    //Serial.print("Selected Truck "); Serial.println(this->selected_Truck);
-    switch (this->selected_Truck) {
-        case 2: // ECE2252015 only existing Fahrzeug
+    
+    // Same map for all fahrzeug
             temp.insert(std::pair<int, int>(20001,i++)); // 0 
             temp.insert(std::pair<int, int>(20003,i++)); // 1
             temp.insert(std::pair<int, int>(20011,i++)); // 2
@@ -134,15 +133,20 @@ bool LOITRUCK::create_map()
             temp.insert(std::pair<int, int>(24004,i++)); //---- IstLenkwinkel Null non teach ---- 61
             temp.insert(std::pair<int, int>(24014,i++)); //---- Min IstLenkwinkel Null teach ---- 62
             temp.insert(std::pair<int, int>(24024,i++)); //---- Min IstLenkwinkel Recht teach ---- 63
-            break;
-        default:
-            this->_runState = STATE_WELCOME;    // non existed then fall back
-            Serial.println("Not create map");
-            return false;
-            break;
-    }
-
+            
+    this->CAN_Expedited_Map.clear();
     this->CAN_Expedited_Map = temp;
+
+    // create Fahrzeug name map
+    this->create_segmented_res_Fahrzeug_Name();    
+    
+    // display segmented array
+    Serial.print("Detail Segmented Fahrzeug Name size : ");
+    Serial.println(sizeof(this->segmented_res_Fahrzeug_Name)/sizeof(this->segmented_res_Fahrzeug_Name[0]));
+    for (int i = 0; i<5; i++)
+    {
+      Serial.println(this->segmented_res_Fahrzeug_Name[i]);  
+    }
     
     //Serial.println("Created map");
     // PRINT CAN_Expedited_Map
@@ -168,27 +172,27 @@ __u16 prepare_ID(__u16 ID_req)
 }
 
 // calculate Command_ID
-__u8 prepare_Command_ID(can_frame req, bool end_msg)
+__u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
 {
     __u8 command_ID = req.data[0] & 0xf0;  // filter out n,e,struct MyStruct
     __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
     __u8 subindex_ID = req.data[3];
 
-
-    switch (command_ID) {
-        case 0x20: // initiate domain download
-            if (index_ID == 0x2020 && subindex_ID == 0x01)
-            {
-                command_ID = 0x80; // ABORT
-            } else {
-                command_ID = 0x60;  // Server reply
-            }            
+    if (this->_runMode == MODE_ADT){
+        // only in ADT & apply all or ADT & write command
+        if ((this->_runMode_Apply == ALL) || (command_ID == 0x20)){
+            command_ID = 0x80; // ABORT        
+        }        
+    } 
+        else      
+    {
+        switch (command_ID) {
+        case 0x20: // initiate domain download            
+            command_ID = 0x60;  // Server reply                        
             break;
         case 0x00:  // download domain segment toggle = 0
             command_ID |= 0x20;  // or to remain toggle bit
             break;
-        case 0x01:  // download domain segment toggle = 1
-            command_ID |= 0x20;  // or to remain toggle bit
         case 0x40:  // initiate domain upload
             if (req.data[2] == 0x24 && subindex_ID == 0x02)
             {
@@ -210,7 +214,9 @@ __u8 prepare_Command_ID(can_frame req, bool end_msg)
         default : // Unknown
             command_ID = 0x00;
             break;
-    }
+        }    
+    }   
+    
 
     return command_ID;
 }
@@ -236,10 +242,49 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
                 this->create_map();
                 break;
             case STATE_SELECT_MODE:
-                this->_runState = STATE_RUN;                
-                this->_1stRun = true;
+                this->_runState = STATE_CONFIG;
                 this->_runMode = RUN_MODE(this->_mousePos);
                 break;    
+            case STATE_CONFIG:                
+                switch (this->_mousePos) {
+                    case 1:// line 1 Range
+                        this->_runState = CONFIG_SELECT_RANGE;
+                        break;
+                    case 2:// line 2 Delay
+                        this->_runState = CONFIG_SELECT_DELAY;
+                        break;
+                    case 3:// line 3 Run
+                        this->_runState = STATE_RUN;                                        
+                        break;
+                    default:
+                        break;
+                }
+                break;            
+            // press in config state to confirm and back to state_config          
+            case STATE_RUN:
+                // if go back and click
+                if (mapx > 400){
+                    this->_runState = STATE_CONFIG;
+                } else {
+                    switch (this->_runMode){
+                    case MODE_HAPPY:
+                        this->_runMode = MODE_ADT;
+                        break;
+                    case MODE_ADT:
+                        this->_runMode = MODE_UNHAPPY;
+                        break;
+                    case MODE_UNHAPPY:
+                        this->_runMode = MODE_IGNORE;
+                        break;
+                    case MODE_IGNORE:
+                        this->_runMode = MODE_HAPPY;
+                        break;
+                    default:
+                        break;
+                    }    
+                }
+                
+                break;
             default:
                 break;
         }
@@ -259,15 +304,21 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
             case STATE_SELECT_MODE:
                 this->_runState = STATE_SELECT_TRUCK;
                 this->_mousePos = 2;
-                break;
-            case STATE_RUN:
+                break;            
+            case STATE_CONFIG:
                 this->_runState = STATE_SELECT_MODE;
                 this->_mousePos = 2;
-                break;
+                break;    
             case STATE_DEMO:
                 this->_runState = STATE_WELCOME;
                 this->_mousePos = 2;
-                break;    
+                break;     
+            case CONFIG_SELECT_DELAY:
+                this->_runState = STATE_CONFIG;
+                break;
+            case CONFIG_SELECT_RANGE:
+                this->_runState = STATE_CONFIG;
+                break;                       
             default:
                 break;
         }
@@ -276,39 +327,40 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
     if (mapy < -100)
     {
         // GO DOWN
-        if (this->_mousePos < 3) {this->_mousePos++;}
-        /*
-        switch (this->_runState) {
-            case STATE_WELCOME:
-                if (this->_mousePos == 2){this->_mousePos++;}
+        switch (this->_runState)
+        {
+            case CONFIG_SELECT_RANGE:
+                // Change between WRITE ONLY and ALL
+                this->_runMode_Apply = APPLY_RANGE(1 - this->_runMode_Apply);
                 break;
-            case STATE_SELECT_TRUCK:
-                if (this->_mousePos < 3){this->_mousePos++;}
-                break;
-            case STATE_SELECT_MODE:
-                if (this->_mousePos < 3){this->_mousePos++;}
-            case STATE_RUN:
+            case CONFIG_SELECT_DELAY:
+                // Decrease delay by 100
+                if (this->_runMode_Delay >= 100){this->_runMode_Delay -= 100;}                
+                break;            
+            default:
+                if (this->_mousePos < 3) {this->_mousePos++;}
                 break;
         }
-        */
+                
+                
     } else if (mapy > 100)
     {
         // GO UP
-        if (this->_mousePos > 0){this->_mousePos--;}
-        /*
-        switch (this->_runState) {
-            case STATE_WELCOME:
-                if (this->_mousePos > 0){this->_mousePos--;}
+        switch (this->_runState)
+        {
+            case CONFIG_SELECT_RANGE:
+                // Change between WRITE ONLY and ALL
+                this->_runMode_Apply = APPLY_RANGE(1 - this->_runMode_Apply);
                 break;
-            case STATE_SELECT_TRUCK:
+            case CONFIG_SELECT_DELAY:
+                // Decrease delay by 100
+                this->_runMode_Delay += 100;               
+                break;            
+            default:
                 if (this->_mousePos > 0){this->_mousePos--;}
-                break;
-            case STATE_SELECT_MODE:
-                if (this->_mousePos > 0){this->_mousePos--;}
-            case STATE_RUN:
                 break;
         }
-        */
+        
     }
 
     return true;
@@ -323,7 +375,7 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
     it = this->CAN_Expedited_Map.find(indx_subindx);
     int indx_in_res_table;
 
-    __u8 command_id = req.data[0];
+    __u8 command_id = req.data[0] & 0xf0;
 
     //Serial.println(indx_subindx);
     
@@ -333,15 +385,28 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
     to_Return.data2 = 0x00;
     to_Return.data3 = 0x00;
 
-    // if found in map
-    if (it != this->CAN_Expedited_Map.end())
-    {
-        indx_in_res_table = (it->second);
+    // DELAY
+    if ((this->_runMode_Apply == ALL) || (command_id == 0x20)){
+        delay(this->_runMode_Delay);
+    }
+    // IGNORE or NOT
+    if (this->_runMode == MODE_IGNORE){
+            if ((this->_runMode_Apply == ALL) || (command_id == 0x20)){
+                this->ignore = true;
+            }
+    }
+
+
+    // MODE 
+    // if (happy or apply to write only) and not ignore
+    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply == WRITE_ONLY)) && (!this->ignore)){
         
-            
-            //Serial.println(indx_in_res_table);           
+            // if found in map    
+            if (it != this->CAN_Expedited_Map.end())
+            {
+                indx_in_res_table = (it->second);                            
                 //---------------- WEIRD BEHAVIOR (without switch not run properly)--------------------------
-                 switch (indx_in_res_table){
+                switch (indx_in_res_table){
                     case 0: // res_2000_01_1
                         to_Return.data0 = pgm_read_byte(*(&res_table_1[indx_in_res_table]));
                         to_Return.data1 = pgm_read_byte(*(&res_table_1[indx_in_res_table])+1);
@@ -491,11 +556,9 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
                         break;
                     case 24: //---- Status 2461---  
                         //Serial.println("Ask Sollwert LenkenStatus 2461");                      
-                        to_Return.data0 = this->loiTruck_Lenken_Soll_Status_0;                         
-                        to_Return.data1 = this->loiTruck_Lenken_Soll_Status_1;
-
                         
-
+                        to_Return.data0 = this->loiTruck_Lenken_Soll_Status_0;                         
+                        to_Return.data1 = this->loiTruck_Lenken_Soll_Status_1;                        
                         to_Return.data2 = 0x00;
                         to_Return.data3 = 0x00;                       
                         break;
@@ -547,25 +610,45 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
                         if (this->_ist_teach_In == true){
                             //long time_pass = millis() - this->_last_saved_time;
                             this->_count_teach_In++;
-                            if (this->loiTruck_Lenken_Ist_Status_0 == 0x00){
+                            if (this->_count_teach_In < 10){
+                                //this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0 - this->_count_teach_In;
+                                
+                                             
+                            } else if ((this->_count_teach_In == 20) && (this->loiTruck_Lenken_Ist_Status_0 == 0x00)){
                                 this->loiTruck_Lenken_Ist_Status_0 = 0x22;
                                 this->loiTruck_Lenken_Ist_Status_1 = 0x22;   
-                                //this->_last_saved_time = millis();                                                                                                                                                                   
-                                this->_servo.write(60);                                
-                            } 
-                            
-                            else if (this->loiTruck_Lenken_Ist_Status_0 == 0x22){
-                                this->loiTruck_Lenken_Ist_Status_0 = 0x66;
-                                this->loiTruck_Lenken_Ist_Status_1 = 0x66;                                                                                                                                                                      
-                                this->_servo.write(90);
+                                //this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;
+                                //this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;
                                 
+                                //this->_last_saved_time = millis();                                                                                                                                                                   
+                                this->_servo.write(60);
+
+                            } else if ((this->_count_teach_In > 20) && (this->_count_teach_In < 30)){
+                                //this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0 - random(0,10);
+                                
+                                
+                            } else if ((this->_count_teach_In == 40)  && (this->loiTruck_Lenken_Ist_Status_0 == 0x22)){
+                                this->loiTruck_Lenken_Ist_Status_0 = 0x66;
+                                this->loiTruck_Lenken_Ist_Status_1 = 0x66;   
+                                //this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0;
+                                //this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1;
+
+                                this->_servo.write(90);
                             }
-                            else if (this->loiTruck_Lenken_Ist_Status_0 == 0x66){
+                            else if ((this->_count_teach_In > 40) && (this->_count_teach_In < 50)){
+                                //this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0 - random(0,10);                                                                                                                                                                                                         
+                            } else if ((this->_count_teach_In == 50)  && (this->loiTruck_Lenken_Ist_Status_0 == 0x66)){
                                 this->loiTruck_Lenken_Ist_Status_0 = 0x77;
-                                this->loiTruck_Lenken_Ist_Status_1 = 0x77;                                                                                                                                                                      
+                                this->loiTruck_Lenken_Ist_Status_1 = 0x77;
+                                
+                                //this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0;
+                                //this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;
+
                                 this->_servo.write(120);
-                                this->_ist_teach_In = false;   
-                            }                                
+
+                                this->_count_teach_In = 0;
+                                this->_ist_teach_In = false;
+                            }                               
                         }
 
                         to_Return.data0 = this->loiTruck_Lenken_Ist_Status_0;                         
@@ -702,6 +785,15 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
                         to_Return.data2 = 0x00;
                         to_Return.data3 = 0x00;                                          
                         break;
+
+                    case 47: //---- SAVE 1010---                        
+                        //delay(2000);
+                        to_Return.data0 = 0x00;                         
+                        to_Return.data1 = 0x00;                         
+
+                        to_Return.data2 = 0x00;
+                        to_Return.data3 = 0x00;                                          
+                        break;
                     
                     case 52: //---- standard ---
                         to_Return.data0 = this->loiTruck_Lenken_Standard_0;                         
@@ -789,11 +881,21 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
 
                     default:                        
                         break;
-                 }
-                     
+                }
+            }            
+        }
         
+        if (this->_runMode == MODE_ADT){
+            // only apply if ADT & ALL or ADT & Write
+            if ((this->_runMode_Apply == ALL) || (command_id == 0x20)){
+                to_Return.data0 = 0x11;
+                to_Return.data1 = 0x00;
+                to_Return.data2 = 0x09;
+                to_Return.data3 = 0x06;
+            }                    
+        } 
 
-    }
+    
 
     
     return to_Return;
@@ -810,14 +912,9 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
     //Serial.println(req_frame.data[0],HEX);    
     __u8 command_id = req_frame.data[0];
     command_id &= 0xf0;
-
-    //Serial.println(create_str_from_frame(req_frame));
-    //Serial.println("in table");
-    //Serial.println(indx_in_res_table);
-    //Serial.println("sent");
+    
     Serial.println(indx_subindx);
-    //lcd.setCursor(0,2);
-    //lcd.print(indx_subindx);
+        
 
     // if found in map
     if ((it != this->CAN_Expedited_Map.end()) && (command_id == 0x20))
@@ -825,44 +922,86 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
             //---------------- WEIRD BEHAVIOR (without switch not run properly)--------------------------
             switch (indx_in_res_table){
                 case 3: // write serial nummer
-                    this->loiTruck_Seri0 = req_frame.data[4];
-                    this->loiTruck_Seri1 = req_frame.data[5];
-                    this->loiTruck_Seri2 = req_frame.data[6];
-                    this->loiTruck_Seri3 = req_frame.data[7]; 
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Seri0 = req_frame.data[4];
+                        this->loiTruck_Seri1 = req_frame.data[5];
+                        this->loiTruck_Seri2 = req_frame.data[6];
+                        this->loiTruck_Seri3 = req_frame.data[7];
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Seri0 = req_frame.data[4] - 1;
+                        this->loiTruck_Seri1 = req_frame.data[5] - 1;
+                        this->loiTruck_Seri2 = req_frame.data[6];
+                        this->loiTruck_Seri3 = req_frame.data[7];
+                    }
+                     
                     break;
                 case 5: // write betriebszeit
-                    this->loiTruck_Zeit0 = req_frame.data[4];
-                    this->loiTruck_Zeit1 = req_frame.data[5];
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Zeit0 = req_frame.data[4];
+                        this->loiTruck_Zeit1 = req_frame.data[5];
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Zeit0 = req_frame.data[4] - 1;
+                        this->loiTruck_Zeit1 = req_frame.data[5] - 1;    
+                    }    
+                    
                     break;
                 case 21: // write lenkkorrektur
-                    this->loiTruck_Lenken_Korrektur = req_frame.data[4];
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Korrektur = req_frame.data[4];
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Korrektur = req_frame.data[4] - 1;
+                    }
                     break;
                 case 22: // write bandagenentspannung
-                    this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4];
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4];
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4] - 1;
+                    }
+                    
                     break;
                 case 23: // write lenkübersetzung
-                    this->loiTruck_Lenken_Ubersetzung = req_frame.data[4];
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Ubersetzung = req_frame.data[4];
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Ubersetzung = req_frame.data[4] - 1;
+                    }
+                    
                     break;               
                 case 27: // write logbuch sollindex
-                    this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Logbuch_SavedIndx = req_frame.data[4] - 1;
+                    }
+                    
                     break;
                 case 48: // write load
                     Serial.println("Write Load");
                     Serial.println("Start step 1");    
 
-                    this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;
-                    this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;                                                                                                
                     this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0;
-                    this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;                                                                                                   
+                    this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;
+
                     this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0;
                     this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1;
+
+                    this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;
+                    this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;
+
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 = 0x00;                    
+                        this->loiTruck_Lenken_Soll_Status_1 = 0x00; // not available for teach in
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 = 0x11;                    
+                        this->loiTruck_Lenken_Soll_Status_1 = 0x11; // not available for teach in
+                    }
                     
-                    this->loiTruck_Lenken_Soll_Status_0 = 0x00;                    
-                    this->loiTruck_Lenken_Soll_Status_1 = 0x00; // not available for teach in
-                    //this->loiTruck_Lenken_Ist_Status_0 = 0x00;
-                    //this->loiTruck_Lenken_Ist_Status_1 = 0x00; 
+                    
 
                     this->loiTruck_lenken_load = true;
+
+                    this->_teach_In = true;
                     break;
                 case 47: // write save
                     Serial.println("Write Save");
@@ -871,12 +1010,20 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                         // not available for teach in                        
                         this->loiTruck_lenken_load = false;
                     } else {
-                       
+                        delay(1000);    // delay to make step 4 run slower
                         this->loiTruck_Lenken_Soll_Status_0 = 0x00;                    
                         this->loiTruck_Lenken_Soll_Status_1 = 0x00; // not available for teach in
                         //this->loiTruck_Lenken_Ist_Status_0 = 0x00;
                         //this->loiTruck_Lenken_Ist_Status_1 = 0x00; // not available for teach in                        
-                
+                        
+                        this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0 - 1;
+                        //this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;
+
+                        this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0 - 1;
+                        //this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1;
+
+                        this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0 - 1;
+                        //this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;
                     }
 
                     /*
@@ -887,38 +1034,61 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     
                     break;
                 case 51: // save null                                        
-                    //this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0;
-                    //this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;                    
-                    this->loiTruck_Lenken_Soll_Status_0 =  0x77;
-                    this->loiTruck_Lenken_Soll_Status_1 =  0x77;                             
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 =  0x77;
+                        this->loiTruck_Lenken_Soll_Status_1 =  0x77;
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 =  0x88;
+                        this->loiTruck_Lenken_Soll_Status_1 =  0x88;
+                    }                   
+                                                 
 
                     this->loiTruck_lenken_save_null = true;
                     this->_ist_teach_In = true;                                                                                                                                                                                                                               
 
-                    //this->loiTruck_Lenken_Ist_Status_0 = 0x00;
-                    //this->loiTruck_Lenken_Ist_Status_1 = 0x00; // not available for teach in
+                    //this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0;
+                    //this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1 - 1;
 
+                    
                     this->_count_teach_In = 0;                    
                     Serial.println("save null");
                     Serial.println("start step 3");                    
                     break;
                 case 50: // save recht                    
-                    //this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0;
-                    //this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1;                       
+                                           
                     this->loiTruck_lenken_save_recht = true;
-                    this->loiTruck_Lenken_Soll_Status_0 =  0x66;
-                    this->loiTruck_Lenken_Soll_Status_1 =  0x66;
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 =  0x66;
+                        this->loiTruck_Lenken_Soll_Status_1 =  0x66;
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 =  0x55;
+                        this->loiTruck_Lenken_Soll_Status_1 =  0x55;
+                    }      
+                    
+                    
+                    //this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0;
+                    //this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1 - 1;
+
                     Serial.println("save recht");
                     break;
                 case 49: // save link                    
-                    //this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;
-                    //this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1;
+                    
                     Serial.println("Start step 2");                    
                     this->loiTruck_lenken_save_link = true;
-                    this->loiTruck_Lenken_Soll_Status_0 =  0x22;
-                    this->loiTruck_Lenken_Soll_Status_1 =  0x22;        
+                    if (this->_runMode == MODE_HAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 =  0x22;
+                        this->loiTruck_Lenken_Soll_Status_1 =  0x22;
+                    } else if (this->_runMode == MODE_UNHAPPY){
+                        this->loiTruck_Lenken_Soll_Status_0 =  0x33;
+                        this->loiTruck_Lenken_Soll_Status_1 =  0x33;
+                    }    
+                            
+                    
+                    //this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;
+                    //this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1 - 1;
+
                     Serial.println("save link");
-                    this->_teach_In = true;
+                    
                     break;
                 default:
                     break;                
@@ -939,53 +1109,64 @@ void LOITRUCK::actuate_servo(int minPot, int maxPot)
 
     //Serial.print("Servo map "); Serial.println(servoWrite);
     //Serial.print("val - lastval = "); Serial.print(val);Serial.print(" ");Serial.println(this->last_Servo_Pos);
-    /*
+    
     if ((abs(val - this->last_Servo_Pos) > 10) && (!this->_ist_teach_In)){
         
         String tempstr = String(val,HEX);
         __u8 firstByte = strtoul(tempstr.substring(0, 2).c_str(),NULL,16);
         __u8 secondByte = strtoul(tempstr.substring(2).c_str(),NULL,16);
 
-        
-        if (!this->loiTruck_lenken_save_null){
+        if (this->_teach_In){
+            if (!this->loiTruck_lenken_save_null){
+            this->loiTruck_Lenken_IstLenkwinkel_Null_0 = firstByte;
+            this->loiTruck_Lenken_IstLenkwinkel_Null_1 = secondByte;
+
             this->loiTruck_Lenken_SollLenkwinkel_Null_0 = firstByte;
             this->loiTruck_Lenken_SollLenkwinkel_Null_1 = secondByte;
-        }
+            }
         
-        if (!this->loiTruck_lenken_save_link){
+            if (!this->loiTruck_lenken_save_link){
             //Serial.println("Hier lenken!");
-            this->loiTruck_Lenken_SollLenkwinkel_Link_0 = firstByte;
-            this->loiTruck_Lenken_SollLenkwinkel_Link_1 = secondByte;
-        }
+                this->loiTruck_Lenken_IstLenkwinkel_Link_0 = firstByte;
+                this->loiTruck_Lenken_IstLenkwinkel_Link_1 = secondByte;
+
+                this->loiTruck_Lenken_SollLenkwinkel_Link_0 = firstByte;
+                this->loiTruck_Lenken_SollLenkwinkel_Link_1 = secondByte;
+            }
         
-        if (!this->loiTruck_lenken_save_recht){
-            this->loiTruck_Lenken_SollLenkwinkel_Recht_0 = firstByte;
-            this->loiTruck_Lenken_SollLenkwinkel_Recht_1 = secondByte;
+            if (!this->loiTruck_lenken_save_recht){
+                this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = firstByte;
+                this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = secondByte;
+
+                this->loiTruck_Lenken_SollLenkwinkel_Recht_0 = firstByte;
+                this->loiTruck_Lenken_SollLenkwinkel_Recht_1 = secondByte;
+            }
+
         }
-        
+                
         //Serial.println("Here !");
         //Serial.println(tempstr);
         //Serial.println(secondByte,HEX);
         //Serial.println(this->loiTruck_Lenken_IstLenkwinkel_Link_1);
 
-        /*
+        
         if ( servoWrite > 80 && servoWrite < 100)    // Mitte
         {                        
-            if (!this->_teach_In){
+            if (this->_teach_In){
                 this->loiTruck_Lenken_Soll_Status_0 = 0x11;
                 this->loiTruck_Lenken_Soll_Status_1 = 0x11;                            
             }
             
         } else if (servoWrite < 80) // Left
         {                        
-            if (!this->_teach_In){
+            if (this->_teach_In){
                 this->loiTruck_Lenken_Soll_Status_0 = 0x22;
                 this->loiTruck_Lenken_Soll_Status_1 = 0x22;
             }
         
         } else if (servoWrite > 100)
         {            
-            if (!this->_teach_In){
+            if (this->_teach_In){
                 this->loiTruck_Lenken_Soll_Status_0 = 0x44;
                 this->loiTruck_Lenken_Soll_Status_1 = 0x44;
             }            
@@ -993,13 +1174,10 @@ void LOITRUCK::actuate_servo(int minPot, int maxPot)
         
     
         this->_servo.write(servoWrite);
-    } else {
-        //this->loiTruck_Lenken_Status_0 = 0x77;
-        //this->loiTruck_Lenken_Status_1 = 0x77;
     }
 
     this->last_Servo_Pos = val;
-    */
+    
 
 }
 
@@ -1056,7 +1234,7 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
             }
             break;
         case STATE_RUN:     
-            if (this->_1stRun){
+            
                 lcd.clear();
                 lcd.setCursor(0,0);
                 strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
@@ -1076,13 +1254,81 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     default: 
                         break;
                 }
-                this->_1stRun = false;
-                }                   
+                                                 
             break;
         case STATE_DEMO:
             lcd.clear();
             lcd.setCursor(4,0);
             lcd.print("DEMO");
+            break;
+        case STATE_CONFIG:
+            lcd.clear();
+            lcd.setCursor(0, this->_mousePos);
+            lcd.print("->");
+            lcd.setCursor(1,0); // header
+            switch (this->_runMode){
+                case 0:
+                    lcd.print("MODE HAPPY CONFIG");
+                    break;
+                case 1:
+                    lcd.print("MODE ADT CONFIG");
+                    break;
+                case 2:
+                    lcd.print("MODE UNHAPPY CONFIG");
+                    break;
+                case 3:
+                    lcd.print("MODE IGNORE CONFIG");
+                    break;
+                default:
+                    break;
+            }
+            // line 1 Range
+            lcd.setCursor(3,1);
+            lcd.print("Range:");
+            lcd.setCursor(9,1);
+            switch (this->_runMode_Apply) {
+                case 0:
+                    lcd.print("WRITE_ONLY");
+                    break;
+                case 1:
+                    lcd.print("ALL");
+                    break;
+                default:
+                    break;
+            }
+                        
+            // line 2 delay
+            lcd.setCursor(3,2);
+            lcd.print("Delay:");
+            lcd.setCursor(9,2);
+            lcd.print(this->_runMode_Delay);    
+            // line 3 Run
+            lcd.setCursor(3,3);
+            lcd.print("RUN");  
+            break;
+        case CONFIG_SELECT_RANGE:
+            lcd.setCursor(9,1);
+            switch (this->_runMode_Apply) {
+                case 0:
+                    lcd.print("WRITE_ONLY");
+                    break;
+                case 1:
+                    lcd.print("ALL       ");
+                    break;
+            }
+            // delete cursor
+            lcd.setCursor(0, this->_mousePos);
+            lcd.print("  *");            
+            
+            break;
+        case CONFIG_SELECT_DELAY:
+            lcd.setCursor(9,2);
+            
+            lcd.print(this->_runMode_Delay);lcd.print("   ");
+            // delete cursor
+            lcd.setCursor(0, this->_mousePos);
+            lcd.print("  *");                    
+            
             break;
         default:
             break;
@@ -1197,26 +1443,126 @@ can_frame create_frame_from_str(String _toConvert)
 
 void LOITRUCK::create_segmented_res_Fahrzeug_Name()
 {
-    memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
-    __u8 res[] = {0x00, 0x45, 0x43, 0x45, 0x32, 0x32, 0x35, 0x20};
-    can_frame temp = create_CAN_frame(0x581, 8, res);
-    this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
+    // EFG411511 2019
+    if (this->selected_Truck == 0){
+        memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
+        __u8 res[] = {0x00, 0x45, 0x46, 0x47, 0x34, 0x31, 0x31, 0x35};
+        can_frame temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
 
-    assign_arr(res, 0x10, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20);
-    temp = create_CAN_frame(0x581, 8, res);
-    this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
+        assign_arr(res, 0x10, 0x31, 0x31, 0x20, 0x20, 0x20, 0x20, 0x20);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
 
-    assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x35, 0x00, 0x00, 0x00);
-    temp = create_CAN_frame(0x581, 8, res);
-    this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x39, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
 
-    assign_arr(res, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
-    temp = create_CAN_frame(0x581, 8, res);
-    this->segmented_res_Fahrzeug_Name[3] = create_str_from_frame(temp);
+        assign_arr(res, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[3] = create_str_from_frame(temp);
 
-    assign_arr(res, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
-    temp = create_CAN_frame(0x581, 8, res);
-    this->segmented_res_Fahrzeug_Name[4] = create_str_from_frame(temp);
+        assign_arr(res, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[4] = create_str_from_frame(temp);
+
+        // assign Seri
+        this->loiTruck_Seri0 = Seri0_FZ0;
+        this->loiTruck_Seri1 = Seri1_FZ0;
+        this->loiTruck_Seri2 = Seri2_FZ0;
+        this->loiTruck_Seri3 = Seri3_FZ0;
+    } 
+    else
+    // EJE 111211 2018 
+    if (this->selected_Truck == 1){
+        memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
+        __u8 res[] = {0x00, 0x45, 0x4a, 0x45, 0x31, 0x31, 0x31, 0x32};
+        can_frame temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x10, 0x31, 0x31, 0x20, 0x20, 0x20, 0x20, 0x20);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x38, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[3] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[4] = create_str_from_frame(temp);
+
+        // assign Seri
+        this->loiTruck_Seri0 = Seri0_FZ1;
+        this->loiTruck_Seri1 = Seri1_FZ1;
+        this->loiTruck_Seri2 = Seri2_FZ1;
+        this->loiTruck_Seri3 = Seri3_FZ1;
+    }
+    else
+    // ECE225 2018
+    if (this->selected_Truck == 2){
+        memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
+        __u8 res[] = {0x00, 0x45, 0x43, 0x45, 0x32, 0x32, 0x35, 0x20};
+        can_frame temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x10, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x38, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[3] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[4] = create_str_from_frame(temp);
+
+        // assign Seri
+        this->loiTruck_Seri0 = Seri0_FZ2;
+        this->loiTruck_Seri1 = Seri1_FZ2;
+        this->loiTruck_Seri2 = Seri2_FZ2;
+        this->loiTruck_Seri3 = Seri3_FZ2;
+    } 
+    else 
+    // ERE 211 2016
+    if (this->selected_Truck == 3){
+        memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
+        __u8 res[] = {0x00, 0x45, 0x52, 0x45, 0x32, 0x31, 0x31, 0x20};
+        can_frame temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x10, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x36, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[3] = create_str_from_frame(temp);
+
+        assign_arr(res, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        temp = create_CAN_frame(0x581, 8, res);
+        this->segmented_res_Fahrzeug_Name[4] = create_str_from_frame(temp);
+
+        // assign Seri
+        this->loiTruck_Seri0 = Seri0_FZ3;
+        this->loiTruck_Seri1 = Seri1_FZ3;
+        this->loiTruck_Seri2 = Seri2_FZ3;
+        this->loiTruck_Seri3 = Seri3_FZ3;
+    }
+    
 }
 
 void LOITRUCK::set_expecting_Segmented_Req(int count){
