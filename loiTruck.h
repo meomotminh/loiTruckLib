@@ -323,9 +323,9 @@ const PROGMEM uint8_t req_23_2405_SAVE_1[] = {}; //----- save link
 
 //---------------------String for LCD---------------------------------
 const char avai_Truck_0[] PROGMEM = "EFG 4xx5xx (2019)";
-const char avai_Truck_1[] PROGMEM = "EJE 1xx2xx (2018)";
+const char avai_Truck_1[] PROGMEM = "ERC 1xx2xx (2018)";
 const char avai_Truck_2[] PROGMEM = "ECE 2xx (2018)";
-const char avai_Truck_3[] PROGMEM = "ERE 2xx (2016)";
+const char avai_Truck_3[] PROGMEM = "ETV 2xx (2016)";
 
 const char mode_0[] PROGMEM = "MODE HAPPY";
 const char mode_1[] PROGMEM = "MODE ADT";
@@ -460,7 +460,8 @@ enum RUN_MODE {
 };
 
 enum APPLY_RANGE {
-    WRITE_ONLY,
+    WRITE_REQ,
+    WRITE_CHECK,
     ALL,
 };
 
@@ -493,6 +494,7 @@ public:
     APPLY_RANGE _runMode_Apply;
     int _runMode_Delay;
     int _mousePos;
+    bool _just_Save;
     
 
     // For create map
@@ -597,7 +599,7 @@ public:
     LOITRUCK(RUN_MODE runMode, Servo servo) {
         _runMode = runMode;
         _runState = STATE_WELCOME;
-        _runMode_Apply = WRITE_ONLY;
+        _runMode_Apply = WRITE_REQ;
         _runMode_Delay = 0;
 
         _mousePos = 2;

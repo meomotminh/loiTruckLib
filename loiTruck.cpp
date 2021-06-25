@@ -178,13 +178,18 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
     __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
     __u8 subindex_ID = req.data[3];
 
+    Serial.print("just_save"); Serial.println(this->_just_Save);
+    // only in ADT & apply all or ADT & write command
     if (this->_runMode == MODE_ADT){
-        // only in ADT & apply all or ADT & write command
-        if ((this->_runMode_Apply == ALL) || (command_ID == 0x20)){
+        if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) ){
             command_ID = 0x80; // ABORT        
-        }        
-    } 
-        else      
+        } 
+        if ((command_ID == 0x40) && (this->_runMode_Apply == WRITE_CHECK) && this->_just_Save){
+            command_ID = 0x80; // ABORT    
+            this->_just_Save = false;              
+        }  
+    }      
+    if (command_ID != 0x80)      
     {
         switch (command_ID) {
         case 0x20: // initiate domain download            
@@ -215,8 +220,25 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
             command_ID = 0x00;
             break;
         }    
+    }
+
+    // IGNORE or NOT
+    if (this->_runMode == MODE_IGNORE){
+            if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+                this->ignore = true;
+            } else if ((command_ID == 0x40) && (this->_just_Save)){
+                this->ignore = true;                                
+            }
     }   
-    
+
+    // DELAY FINALLY
+    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+        delay(this->_runMode_Delay);
+    } else if ((command_ID == 0x40) && (this->_just_Save)){
+        delay(this->_runMode_Delay);   
+        this->_just_Save = false;               
+    }    
+
 
     return command_ID;
 }
@@ -331,7 +353,9 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
         {
             case CONFIG_SELECT_RANGE:
                 // Change between WRITE ONLY and ALL
-                this->_runMode_Apply = APPLY_RANGE(1 - this->_runMode_Apply);
+                if (this->_runMode_Apply != WRITE_REQ){
+                    this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply - 1);
+                }                
                 break;
             case CONFIG_SELECT_DELAY:
                 // Decrease delay by 100
@@ -350,7 +374,9 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
         {
             case CONFIG_SELECT_RANGE:
                 // Change between WRITE ONLY and ALL
-                this->_runMode_Apply = APPLY_RANGE(1 - this->_runMode_Apply);
+                if (this->_runMode_Apply != ALL){
+                    this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply + 1);
+                }  
                 break;
             case CONFIG_SELECT_DELAY:
                 // Decrease delay by 100
@@ -385,21 +411,12 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
     to_Return.data2 = 0x00;
     to_Return.data3 = 0x00;
 
-    // DELAY
-    if ((this->_runMode_Apply == ALL) || (command_id == 0x20)){
-        delay(this->_runMode_Delay);
-    }
-    // IGNORE or NOT
-    if (this->_runMode == MODE_IGNORE){
-            if ((this->_runMode_Apply == ALL) || (command_id == 0x20)){
-                this->ignore = true;
-            }
-    }
+    
 
 
     // MODE 
     // if (happy or apply to write only) and not ignore
-    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply == WRITE_ONLY)) && (!this->ignore)){
+    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply != ALL)) && (!this->ignore)){
         
             // if found in map    
             if (it != this->CAN_Expedited_Map.end())
@@ -915,6 +932,13 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
     
     Serial.println(indx_subindx);
         
+    // remember Just-Write command
+    if ((this->_runMode_Apply == WRITE_CHECK) && (command_id == 0x20) && (indx_subindx != 5) && (indx_subindx != 20012)){
+        this->_just_Save = true;        
+    }
+
+    
+    
 
     // if found in map
     if ((it != this->CAN_Expedited_Map.end()) && (command_id == 0x20))
@@ -939,7 +963,7 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     if (this->_runMode == MODE_HAPPY){
                         this->loiTruck_Zeit0 = req_frame.data[4];
                         this->loiTruck_Zeit1 = req_frame.data[5];
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) || (this->_runMode == MODE_ADT && (this->_runMode_Apply == WRITE_CHECK))){
                         this->loiTruck_Zeit0 = req_frame.data[4] - 1;
                         this->loiTruck_Zeit1 = req_frame.data[5] - 1;    
                     }    
@@ -1288,9 +1312,12 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
             lcd.setCursor(9,1);
             switch (this->_runMode_Apply) {
                 case 0:
-                    lcd.print("WRITE_ONLY");
+                    lcd.print("WRITE_REQ");
                     break;
                 case 1:
+                    lcd.print("WRITE_CHECK");
+                    break;
+                case 2:
                     lcd.print("ALL");
                     break;
                 default:
@@ -1310,10 +1337,13 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
             lcd.setCursor(9,1);
             switch (this->_runMode_Apply) {
                 case 0:
-                    lcd.print("WRITE_ONLY");
+                    lcd.print("WRITE_REQ  ");
                     break;
                 case 1:
-                    lcd.print("ALL       ");
+                    lcd.print("WRITE_CHECK");
+                    break;
+                case 2:
+                    lcd.print("ALL        ");
                     break;
             }
             // delete cursor
@@ -1443,18 +1473,18 @@ can_frame create_frame_from_str(String _toConvert)
 
 void LOITRUCK::create_segmented_res_Fahrzeug_Name()
 {
-    // EFG411511 2019
+    // EFGBAUREIHE2_32014
     if (this->selected_Truck == 0){
         memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
-        __u8 res[] = {0x00, 0x45, 0x46, 0x47, 0x34, 0x31, 0x31, 0x35};
+        __u8 res[] = {0x00, 0x45, 0x46, 0x47, 0x42, 0x41, 0x55, 0x52};
         can_frame temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x10, 0x31, 0x31, 0x20, 0x20, 0x20, 0x20, 0x20);
+        assign_arr(res, 0x10, 0x45, 0x49, 0x48, 0x45, 0x32, 0x5f, 0x33);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x39, 0x00, 0x00, 0x00);
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x34, 0x00, 0x00, 0x00);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
 
@@ -1473,18 +1503,18 @@ void LOITRUCK::create_segmented_res_Fahrzeug_Name()
         this->loiTruck_Seri3 = Seri3_FZ0;
     } 
     else
-    // EJE 111211 2018 
+    // ERC_214_216B_K2010
     if (this->selected_Truck == 1){
         memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
-        __u8 res[] = {0x00, 0x45, 0x4a, 0x45, 0x31, 0x31, 0x31, 0x32};
+        __u8 res[] = {0x00, 0x45, 0x52, 0x43, 0x5f, 0x32, 0x31, 0x34};
         can_frame temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x10, 0x31, 0x31, 0x20, 0x20, 0x20, 0x20, 0x20);
+        assign_arr(res, 0x10, 0x5f, 0x32, 0x31, 0x36, 0x42, 0x5f, 0x4b);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x38, 0x00, 0x00, 0x00);
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x30, 0x00, 0x00, 0x00);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
 
@@ -1503,7 +1533,7 @@ void LOITRUCK::create_segmented_res_Fahrzeug_Name()
         this->loiTruck_Seri3 = Seri3_FZ1;
     }
     else
-    // ECE225 2018
+    // ECE225 2015
     if (this->selected_Truck == 2){
         memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
         __u8 res[] = {0x00, 0x45, 0x43, 0x45, 0x32, 0x32, 0x35, 0x20};
@@ -1514,7 +1544,7 @@ void LOITRUCK::create_segmented_res_Fahrzeug_Name()
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x38, 0x00, 0x00, 0x00);
+        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x35, 0x00, 0x00, 0x00);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
 
@@ -1533,18 +1563,18 @@ void LOITRUCK::create_segmented_res_Fahrzeug_Name()
         this->loiTruck_Seri3 = Seri3_FZ2;
     } 
     else 
-    // ERE 211 2016
+    // ETBR1BASIS2014
     if (this->selected_Truck == 3){
         memset(this->segmented_res_Fahrzeug_Name, 0, sizeof(this->segmented_res_Fahrzeug_Name));
-        __u8 res[] = {0x00, 0x45, 0x52, 0x45, 0x32, 0x31, 0x31, 0x20};
+        __u8 res[] = {0x00, 0x45, 0x54, 0x42, 0x52, 0x31, 0x42, 0x41};
         can_frame temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[0] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x10, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20);
+        assign_arr(res, 0x10, 0x53, 0x49, 0x53, 0x32, 0x30, 0x31, 0x34);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[1] = create_str_from_frame(temp);
 
-        assign_arr(res, 0x00, 0x32, 0x30, 0x31, 0x36, 0x00, 0x00, 0x00);
+        assign_arr(res, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
         temp = create_CAN_frame(0x581, 8, res);
         this->segmented_res_Fahrzeug_Name[2] = create_str_from_frame(temp);
 
