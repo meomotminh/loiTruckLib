@@ -189,6 +189,24 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
             this->_just_Save = false;              
         }  
     }      
+
+    // IGNORE or NOT
+    if (this->_runMode == MODE_IGNORE){
+            if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+                this->ignore = true;
+            } else if ((command_ID == 0x40) && (this->_just_Save)){
+                this->ignore = true;                                
+            }
+    }   
+
+    // DELAY FINALLY
+    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+        delay(this->_runMode_Delay);
+    } else if ((command_ID == 0x40) && (this->_just_Save)){
+        delay(this->_runMode_Delay);   
+        this->_just_Save = false;               
+    }    
+
     if (command_ID != 0x80)      
     {
         switch (command_ID) {
@@ -222,22 +240,7 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
         }    
     }
 
-    // IGNORE or NOT
-    if (this->_runMode == MODE_IGNORE){
-            if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
-                this->ignore = true;
-            } else if ((command_ID == 0x40) && (this->_just_Save)){
-                this->ignore = true;                                
-            }
-    }   
 
-    // DELAY FINALLY
-    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
-        delay(this->_runMode_Delay);
-    } else if ((command_ID == 0x40) && (this->_just_Save)){
-        delay(this->_runMode_Delay);   
-        this->_just_Save = false;               
-    }    
 
 
     return command_ID;
@@ -904,7 +907,7 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
         
         if (this->_runMode == MODE_ADT){
             // only apply if ADT & ALL or ADT & Write
-            if ((this->_runMode_Apply == ALL) || (command_id == 0x20)){
+            if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40))){
                 to_Return.data0 = 0x11;
                 to_Return.data1 = 0x00;
                 to_Return.data2 = 0x09;
@@ -1037,9 +1040,12 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                         delay(1000);    // delay to make step 4 run slower
                         this->loiTruck_Lenken_Soll_Status_0 = 0x00;                    
                         this->loiTruck_Lenken_Soll_Status_1 = 0x00; // not available for teach in
-                        //this->loiTruck_Lenken_Ist_Status_0 = 0x00;
-                        //this->loiTruck_Lenken_Ist_Status_1 = 0x00; // not available for teach in                        
                         
+                        // enable servo -> value again
+                        this->loiTruck_lenken_save_link = false;
+                        this->loiTruck_lenken_save_recht = false;
+                        this->loiTruck_lenken_save_null = false;
+
                         this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0 - 1;
                         //this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;
 
