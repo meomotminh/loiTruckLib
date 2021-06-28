@@ -22,6 +22,8 @@
 
 ## Requirements
 
+![](loiTruckSchema.svg)
+
 >Hardware
 - Board : Arduino Mega 2560
 - LCD 20x4 I2C [link LCD]
