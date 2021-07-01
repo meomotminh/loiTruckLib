@@ -182,9 +182,12 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
     // only in ADT & apply all or ADT & write command
     if (this->_runMode == MODE_ADT){
         if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) ){
+            // DELAY FINALLY
+            delay(this->_runMode_Delay);                    
             command_ID = 0x80; // ABORT        
         } 
         if ((command_ID == 0x40) && (this->_runMode_Apply == WRITE_CHECK) && this->_just_Save){
+            delay(this->_runMode_Delay);   
             command_ID = 0x80; // ABORT    
             this->_just_Save = false;              
         }  
@@ -200,7 +203,7 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
     }   
 
     // DELAY FINALLY
-    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){        
         delay(this->_runMode_Delay);
     } else if ((command_ID == 0x40) && (this->_just_Save)){
         delay(this->_runMode_Delay);   
