@@ -204,7 +204,7 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx)
     }   
 
     // DELAY FINALLY
-    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){        
+    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) && (indx_subindx != 5) && (indx_subindx != 20012))){        
         delay(this->_runMode_Delay);
     } else if ((command_ID == 0x40) && (this->_just_Save)){
         delay(this->_runMode_Delay);   
@@ -423,7 +423,7 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
 
     // MODE 
     // if (happy or apply to write only) and not ignore
-    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply != ALL)) && (!this->ignore)){
+    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply != ALL)) && (!this->ignore) && (command_id != 0x20)){
         
             // if found in map    
             if (it != this->CAN_Expedited_Map.end())
