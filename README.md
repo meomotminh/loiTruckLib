@@ -244,4 +244,6 @@ Three important objects using in the app
     -   Read Command (Command ID = 0x40) : not reply if Range = ALL
     -   Delay is applied base on Range Selection (Write Command,Read Confirm or All)
 
-        
+# WORK FLOW
+
+![](loiTruck.jpg)
