@@ -1287,8 +1287,32 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     default: 
                         break;
                 }
+
+                // line 1 Range
+                lcd.setCursor(3,1);
+                lcd.print("Range:");
+                lcd.setCursor(9,1);
+                switch (this->_runMode_Apply) {
+                    case 0:
+                        lcd.print("WRITE_REQ");
+                        break;
+                    case 1:
+                        lcd.print("WRITE_CHECK");
+                        break;
+                    case 2:
+                        lcd.print("ALL");
+                        break;
+                    default:
+                        break;
+                }
+                        
+                // line 2 delay
+                lcd.setCursor(3,2);
+                lcd.print("Delay:");
+                lcd.setCursor(9,2);
+                lcd.print(this->_runMode_Delay);    
                                                  
-            break;
+                break;
         case STATE_DEMO:
             lcd.clear();
             lcd.setCursor(4,0);
