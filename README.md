@@ -239,8 +239,11 @@ Three important objects using in the app
 
 >MODE UNHAPPY
 
-    -   Write Command : reply 0x60 + confirm wrong
-    -   Read Command : reply 0x4_ + 0000
+    -   Write Command (if Range = WRITE_REQ): 
+        - reply 0x60 
+        - confirm wrong (Read Confirm)
+    -   Read Confirm : reply 0x4_ + 0000 if Range = WRITE_CHECK
+    -   Read Command : reply 0x4_ + 0000 if Range = ALL
     -   Delay is applied base on Range Selection (Write Command,Read Confirm or All)
 
 >MODE IGNORE
