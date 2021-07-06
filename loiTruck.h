@@ -461,7 +461,8 @@ enum RUN_MODE {
 
 enum APPLY_RANGE {
     WRITE_REQ,
-    WRITE_CHECK,
+    READ_CONF,
+    READ_SPECI,
     ALL,
 };
 

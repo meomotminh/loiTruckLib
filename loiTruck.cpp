@@ -187,7 +187,7 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx)
             delay(this->_runMode_Delay);                    
             command_ID = 0x80; // ABORT        
         } 
-        if ((command_ID == 0x40) && (this->_runMode_Apply == WRITE_CHECK) && this->_just_Save){
+        if ((command_ID == 0x40) && (this->_runMode_Apply == READ_CONF) && this->_just_Save){
             delay(this->_runMode_Delay);   
             command_ID = 0x80; // ABORT    
             this->_just_Save = false;              
@@ -395,7 +395,7 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
         }
         
     }
-
+    Serial.println(mapx);
     return true;
 }
 
@@ -920,7 +920,7 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
         } 
 
         if (this->_runMode == MODE_ADT){
-            // only apply if ADT & ALL or ADT & Write_CHECK or ADT & Write_REQ & 20
+            // only apply if ADT & ALL or ADT & READ_CONF or ADT & Write_REQ & 20
             if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40)) || (this->_runMode_Apply == WRITE_REQ && (command_id == 0x20))){
                 to_Return.data0 = 0x11;
                 to_Return.data1 = 0x00;
@@ -950,7 +950,7 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
     Serial.println(indx_subindx);
         
     // remember Just-Write command
-    if ((this->_runMode_Apply == WRITE_CHECK) && (command_id == 0x20) && (indx_subindx != 5) && (indx_subindx != 20012)){
+    if ((this->_runMode_Apply == READ_CONF) && (command_id == 0x20) && (indx_subindx != 5) && (indx_subindx != 20012)){
         this->_just_Save = true;        
     }
 
@@ -1308,7 +1308,7 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                         lcd.print("WRITE_REQ");
                         break;
                     case 1:
-                        lcd.print("WRITE_CHECK");
+                        lcd.print("READ_CONF");
                         break;
                     case 2:
                         lcd.print("ALL");
@@ -1359,7 +1359,7 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     lcd.print("WRITE_REQ");
                     break;
                 case 1:
-                    lcd.print("WRITE_CHECK");
+                    lcd.print("READ_CONF");
                     break;
                 case 2:
                     lcd.print("ALL");
@@ -1384,7 +1384,7 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     lcd.print("WRITE_REQ  ");
                     break;
                 case 1:
-                    lcd.print("WRITE_CHECK");
+                    lcd.print("READ_CONF");
                     break;
                 case 2:
                     lcd.print("ALL        ");
