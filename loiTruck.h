@@ -683,7 +683,7 @@ public:
     
     bool actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C lcd);
     answer prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I2C lcd);
-    __u8 prepare_Command_ID(can_frame req, bool end_msg);
+    __u8 prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx);
     bool create_map();
     bool create_map_command();
     void actuate_servo(int minPot, int maxPot);

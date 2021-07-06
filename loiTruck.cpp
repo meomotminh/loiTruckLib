@@ -172,19 +172,23 @@ __u16 prepare_ID(__u16 ID_req)
 }
 
 // calculate Command_ID
-__u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
+__u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx)
 {
     __u8 command_ID = req.data[0] & 0xf0;  // filter out n,e,struct MyStruct
     __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
     __u8 subindex_ID = req.data[3];
 
     Serial.print("just_save"); Serial.println(this->_just_Save);
+    
     // only in ADT & apply all or ADT & write command
     if (this->_runMode == MODE_ADT){
         if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) ){
+            // DELAY FINALLY
+            delay(this->_runMode_Delay);                    
             command_ID = 0x80; // ABORT        
         } 
         if ((command_ID == 0x40) && (this->_runMode_Apply == WRITE_CHECK) && this->_just_Save){
+            delay(this->_runMode_Delay);   
             command_ID = 0x80; // ABORT    
             this->_just_Save = false;              
         }  
@@ -192,7 +196,7 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
 
     // IGNORE or NOT
     if (this->_runMode == MODE_IGNORE){
-            if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+            if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) && (indx_subindx != 5) && (indx_subindx != 20012))){ // not save logbuch
                 this->ignore = true;
             } else if ((command_ID == 0x40) && (this->_just_Save)){
                 this->ignore = true;                                
@@ -200,7 +204,7 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg)
     }   
 
     // DELAY FINALLY
-    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ))){
+    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) && (indx_subindx != 5) && (indx_subindx != 20012))){        
         delay(this->_runMode_Delay);
     } else if ((command_ID == 0x40) && (this->_just_Save)){
         delay(this->_runMode_Delay);   
@@ -419,7 +423,7 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
 
     // MODE 
     // if (happy or apply to write only) and not ignore
-    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply != ALL)) && (!this->ignore)){
+    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply != ALL)) && (!this->ignore) && (command_id != 0x20)){
         
             // if found in map    
             if (it != this->CAN_Expedited_Map.end())
@@ -905,6 +909,16 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
             }            
         }
         
+        if (this->_runMode == MODE_UNHAPPY){
+            // only apply if UNHAPPY & ALL or UNHAPPY & Write
+            if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40))){
+                to_Return.data0 = 0x00;
+                to_Return.data1 = 0x00;
+                to_Return.data2 = 0x00;
+                to_Return.data3 = 0x00;
+            }                    
+        } 
+
         if (this->_runMode == MODE_ADT){
             // only apply if ADT & ALL or ADT & Write_CHECK or ADT & Write_REQ & 20
             if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40)) || (this->_runMode_Apply == WRITE_REQ && (command_id == 0x20))){
@@ -949,12 +963,12 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
             //---------------- WEIRD BEHAVIOR (without switch not run properly)--------------------------
             switch (indx_in_res_table){
                 case 3: // write serial nummer
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Seri0 = req_frame.data[4];
                         this->loiTruck_Seri1 = req_frame.data[5];
                         this->loiTruck_Seri2 = req_frame.data[6];
                         this->loiTruck_Seri3 = req_frame.data[7];
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Seri0 = req_frame.data[4] - 1;
                         this->loiTruck_Seri1 = req_frame.data[5] - 1;
                         this->loiTruck_Seri2 = req_frame.data[6];
@@ -963,42 +977,42 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                      
                     break;
                 case 5: // write betriebszeit
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Zeit0 = req_frame.data[4];
                         this->loiTruck_Zeit1 = req_frame.data[5];
-                    } else if ((this->_runMode == MODE_UNHAPPY) || (this->_runMode == MODE_ADT && (this->_runMode_Apply == WRITE_CHECK))){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Zeit0 = req_frame.data[4] - 1;
                         this->loiTruck_Zeit1 = req_frame.data[5] - 1;    
                     }    
                     
                     break;
                 case 21: // write lenkkorrektur
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Korrektur = req_frame.data[4];
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Lenken_Korrektur = req_frame.data[4] - 1;
                     }
                     break;
                 case 22: // write bandagenentspannung
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4];
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Lenken_Zeit_Einfall = req_frame.data[4] - 1;
                     }
                     
                     break;
                 case 23: // write lenkübersetzung
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Ubersetzung = req_frame.data[4];
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Lenken_Ubersetzung = req_frame.data[4] - 1;
                     }
                     
                     break;               
                 case 27: // write logbuch sollindex
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Logbuch_SavedIndx = req_frame.data[4];
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Logbuch_SavedIndx = req_frame.data[4] - 1;
                     }
                     
@@ -1064,10 +1078,10 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     
                     break;
                 case 51: // save null                                        
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x77;
                         this->loiTruck_Lenken_Soll_Status_1 =  0x77;
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x88;
                         this->loiTruck_Lenken_Soll_Status_1 =  0x88;
                     }                   
@@ -1087,10 +1101,10 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                 case 50: // save recht                    
                                            
                     this->loiTruck_lenken_save_recht = true;
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x66;
                         this->loiTruck_Lenken_Soll_Status_1 =  0x66;
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x55;
                         this->loiTruck_Lenken_Soll_Status_1 =  0x55;
                     }      
@@ -1105,10 +1119,10 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     
                     Serial.println("Start step 2");                    
                     this->loiTruck_lenken_save_link = true;
-                    if (this->_runMode == MODE_HAPPY){
+                    if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x22;
                         this->loiTruck_Lenken_Soll_Status_1 =  0x22;
-                    } else if (this->_runMode == MODE_UNHAPPY){
+                    } else if ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply == WRITE_REQ)){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x33;
                         this->loiTruck_Lenken_Soll_Status_1 =  0x33;
                     }    
@@ -1725,7 +1739,7 @@ can_frame LOITRUCK::get_Expedited_Response(can_frame _toGet, LiquidCrystal_I2C l
     // get anwort
     anwort = this->prepare_Answer(_toGet, indx_subindx, lcd);
         
-    assign_arr(data, prepare_Command_ID(_toGet, end_msg), _toGet.data[1], _toGet.data[2], _toGet.data[3], anwort.data0, anwort.data1, anwort.data2, anwort.data3); // all bytes count
+    assign_arr(data, prepare_Command_ID(_toGet, end_msg, indx_subindx), _toGet.data[1], _toGet.data[2], _toGet.data[3], anwort.data0, anwort.data1, anwort.data2, anwort.data3); // all bytes count
     temp = create_CAN_frame(prepare_ID(_toGet.can_id), 8, data);
 
     // print on lcd

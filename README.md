@@ -218,30 +218,39 @@ Three important objects using in the app
     
 ### Underlying Run Mode LOGIC
 
->MODE HAPPY
+>CAN Command Classification
 
-    -   Write Command (Command ID = 0x20): reply 0x60 and confirm correctly
-    -   Read Command (Command ID = 0x40): reply 0x4x and value
+    - Write Command (Command ID = 0x2_)
+    - Read Command (Command ID = 0x4_)
+    - Read Confirm (Command ID = 0x4_ after Receive Write Command)
+
+>MODE HAPPY (Default Mode)
+
+    -   Write Command : reply 0x60 and confirm correctly
+    -   Read Command, Read Confirm : reply 0x4_ and value
     -   Delay is applied base on Range Selection (Write Command,Read Confirm or All)
 
 >MODE ADT
 
-    -   Write Command (Command ID = 0x20): reply 0x80 (Abort) + Error Code (sub index does not exist) if Range = WRITE REQ
-    -   Read Confirm (Read after Write Command): reply 0x80 (Abort) + Error Code (sub index does not exist) if Range = WRITE CHECK
-    -   Read Command (Command ID = 0x40): reply 0x80 (Abort) + Error Code (sub index does not exist) if Range = ALL
+    -   Write Command : reply 0x80 (Abort) + Error Code (sub index does not exist) if Range = WRITE REQ
+    -   Read Confirm : reply 0x80 (Abort) + Error Code (sub index does not exist) if Range = WRITE CHECK
+    -   Read Command : reply 0x80 (Abort) + Error Code (sub index does not exist) if Range = ALL
     -   Delay is applied base on Range Selection (Write Command,Read Confirm or All)
 
 >MODE UNHAPPY
 
-    -   Write Command (Command ID = 0x20): reply 0x60 + confirm wrong
-    -   Read Command (Command ID = 0x40): reply 0x4x + 0000 (if Range = ALL)
+    -   Write Command (if Range = WRITE_REQ): 
+        - reply 0x60 
+        - confirm wrong (Read Confirm)
+    -   Read Confirm : reply 0x4_ + 0000 if Range = WRITE_CHECK
+    -   Read Command : reply 0x4_ + 0000 if Range = ALL
     -   Delay is applied base on Range Selection (Write Command,Read Confirm or All)
 
 >MODE IGNORE
 
-    -   Write Command (Command ID = 0x20): not reply if Range = WRITE REQ
-    -   Read Confirm (Read after Write Command): not reply if Range = WRITE CHECK
-    -   Read Command (Command ID = 0x40) : not reply if Range = ALL
+    -   Write Command : not reply if Range = WRITE REQ
+    -   Read Confirm : not reply if Range = WRITE CHECK
+    -   Read Command : not reply if Range = ALL
     -   Delay is applied base on Range Selection (Write Command,Read Confirm or All)
 
 # WORK FLOW
