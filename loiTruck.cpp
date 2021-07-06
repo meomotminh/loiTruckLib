@@ -906,8 +906,8 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
         }
         
         if (this->_runMode == MODE_ADT){
-            // only apply if ADT & ALL or ADT & Write
-            if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40))){
+            // only apply if ADT & ALL or ADT & Write_CHECK or ADT & Write_REQ & 20
+            if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40)) || (this->_runMode_Apply == WRITE_REQ && (command_id == 0x20))){
                 to_Return.data0 = 0x11;
                 to_Return.data1 = 0x00;
                 to_Return.data2 = 0x09;

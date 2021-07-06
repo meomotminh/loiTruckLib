@@ -1,3 +1,5 @@
+
+#include <can.h>
 #include <iterator>
 #include <vector>
 #include <map>
@@ -57,7 +59,7 @@ void isr(){
 
 void setup()
 {
-    Serial.begin(250000);
+    Serial.begin(9600);
 
     // Configure INT1            
     attachInterrupt(digitalPinToInterrupt(2),isr, FALLING);
@@ -196,10 +198,7 @@ void loop()
               flag_Interrupt = false;  
               last_SW_state = SW_state;
               last_saved_mapX = mapX;
-              last_saved_mapY = mapY;
-            
-            
-            
+              last_saved_mapY = mapY;                                  
       }
      
 
