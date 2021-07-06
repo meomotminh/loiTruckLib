@@ -1,0 +1,8 @@
+lib_ref/
+Sender_2/
+*.md
+*.jpg
+*.zip
+*.svg
+*.pdf
+.gitignore

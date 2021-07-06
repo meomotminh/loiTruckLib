@@ -12,6 +12,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <Servo.h>
 #include "loiTruck.h"
+#include <math.h>
 
 
 // Global Vector for data
@@ -178,16 +179,19 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx)
     __u16 index_ID = (req.data[2] << 8) | (req.data[1]);
     __u8 subindex_ID = req.data[3];
 
-    Serial.print("just_save"); Serial.println(this->_just_Save);
+    //Serial.print("just_save"); Serial.println(this->_just_Save);
     
     // only in ADT & apply all or ADT & write command
     if (this->_runMode == MODE_ADT){
-        if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) ){
+        if ((this->_runMode_Apply == ALL) || 
+            ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) || 
+            ((command_ID == 0x40) && (this->_runMode_Apply == READ_SPECI) && (indx_subindx == this->_runMode_Select_Speci)) ){
             // DELAY FINALLY
+
             delay(this->_runMode_Delay);                    
             command_ID = 0x80; // ABORT        
         } 
-        if ((command_ID == 0x40) && (this->_runMode_Apply == WRITE_CHECK) && this->_just_Save){
+        if ((command_ID == 0x40) && (this->_runMode_Apply == READ_CONF) && this->_just_Save){
             delay(this->_runMode_Delay);   
             command_ID = 0x80; // ABORT    
             this->_just_Save = false;              
@@ -196,20 +200,16 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx)
 
     // IGNORE or NOT
     if (this->_runMode == MODE_IGNORE){
-            if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) && (indx_subindx != 5) && (indx_subindx != 20012))){ // not save logbuch
+            if ((this->_runMode_Apply == ALL) || 
+            ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) && (indx_subindx != 5) && (indx_subindx != 20012))){ // not save logbuch
                 this->ignore = true;
             } else if ((command_ID == 0x40) && (this->_just_Save)){
                 this->ignore = true;                                
+            } else if ((command_ID == 0x40) && (this->_runMode_Apply == READ_SPECI) && (indx_subindx == this->_runMode_Select_Speci)){
+                this->ignore = true;                                
             }
     }   
-
-    // DELAY FINALLY
-    if ((this->_runMode_Apply == ALL) || ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) && (indx_subindx != 5) && (indx_subindx != 20012))){        
-        delay(this->_runMode_Delay);
-    } else if ((command_ID == 0x40) && (this->_just_Save)){
-        delay(this->_runMode_Delay);   
-        this->_just_Save = false;               
-    }    
+   
 
     if (command_ID != 0x80)      
     {
@@ -306,13 +306,32 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
                         this->_runMode = MODE_IGNORE;
                         break;
                     case MODE_IGNORE:
-                        this->_runMode = MODE_HAPPY;
+                        this->_runMode = MODE_CONFIG;
+                        break;
+                    case MODE_CONFIG:
+                        // Exit config
+                        if (this->_mousePos == 3){
+                            this->_runMode = MODE_HAPPY;
+                        // Delay    
+                        } else if (this->_mousePos == 2){
+                            this->_runState = CONFIG_DELAY_DURING_RUN;
+                        // Range
+                        } else if (this->_mousePos == 1){
+                            this->_runState = CONFIG_RANGE_DURING_RUN;
+                        }                        
                         break;
                     default:
                         break;
                     }    
                 }
-                
+                break;
+            case CONFIG_SELECT_SPECI:
+                this->_runState = STATE_CONFIG;
+                lcd.noBlink();
+                break;
+            case CONFIG_SPECI_DURING_RUN:
+                this->_runState = STATE_RUN;
+                lcd.noBlink();
                 break;
             default:
                 break;
@@ -345,20 +364,55 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
             case CONFIG_SELECT_DELAY:
                 this->_runState = STATE_CONFIG;
                 break;
+            case CONFIG_DELAY_DURING_RUN:
+                this->_runState = STATE_RUN;
+                break;
             case CONFIG_SELECT_RANGE:
                 this->_runState = STATE_CONFIG;
-                break;                       
+                break;  
+            case CONFIG_RANGE_DURING_RUN:
+                this->_runState = STATE_RUN;
+                break;          
+            case CONFIG_SELECT_SPECI:                
+                if (this->_mousePosx > 0){
+                    this->_mousePosx--;
+                };            
+                break;   
+            case CONFIG_SPECI_DURING_RUN:                
+                if (this->_mousePosx > 0){
+                    this->_mousePosx--;
+                };            
+                break;         
             default:
                 break;
         }
-    } else if (mapx < -400){
+    } 
+    if (mapx < -400){
         // GO FORTH
         switch (this->_runState)
         {
         case CONFIG_SELECT_RANGE:
-            if (this->_runMode_Apply == )
+            if (this->_runMode_Apply == READ_SPECI){
+                this->_runState = CONFIG_SELECT_SPECI;
+                this->_mousePosx = 9;
+            }
             break;
-        
+        case CONFIG_RANGE_DURING_RUN:
+            if (this->_runMode_Apply == READ_SPECI){
+                this->_runState = CONFIG_SPECI_DURING_RUN;
+                this->_mousePosx = 9;
+            }
+            break;
+        case CONFIG_SELECT_SPECI:
+            if (this->_mousePosx < 20){
+                    this->_mousePosx++;
+            }            
+            break;  
+        case CONFIG_SPECI_DURING_RUN:
+            if (this->_mousePosx < 20){
+                    this->_mousePosx++;
+            }            
+            break;       
         default:
             break;
         }
@@ -375,10 +429,38 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
                     this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply - 1);
                 }                
                 break;
+            case CONFIG_RANGE_DURING_RUN:
+                // Change between WRITE ONLY and ALL
+                if (this->_runMode_Apply != WRITE_REQ){
+                    this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply - 1);
+                }                
+                break;
             case CONFIG_SELECT_DELAY:
                 // Decrease delay by 100
                 if (this->_runMode_Delay >= 100){this->_runMode_Delay -= 100;}                
-                break;            
+                break;  
+            case CONFIG_DELAY_DURING_RUN:
+                // Decrease delay by 100
+                if (this->_runMode_Delay >= 100){this->_runMode_Delay -= 100;}                
+                break;  
+            case CONFIG_SELECT_SPECI:
+                // decrease delay by 100
+                {
+                int tempMinus = (int)(pow(10,13-this->_mousePosx)+0.5);
+                if (this->_runMode_Select_Speci - tempMinus > 9999){
+                    this->_runMode_Select_Speci -= (int)(pow(10,13-this->_mousePosx)+0.5);               
+                }
+                }                
+                break;
+            case CONFIG_SPECI_DURING_RUN:
+                // decrease delay by 100
+                {
+                int tempMinus = (int)(pow(10,13-this->_mousePosx)+0.5);
+                if (this->_runMode_Select_Speci - tempMinus > 9999){
+                    this->_runMode_Select_Speci -= (int)(pow(10,13-this->_mousePosx)+0.5);               
+                }
+                }                
+                break;           
             default:
                 if (this->_mousePos < 3) {this->_mousePos++;}
                 break;
@@ -393,13 +475,41 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
             case CONFIG_SELECT_RANGE:
                 // Change between WRITE ONLY and ALL
                 if (this->_runMode_Apply != ALL){
-                    this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply + 1);
+                    this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply + 1);                    
+                }  
+                break;
+            case CONFIG_RANGE_DURING_RUN:
+                // Change between WRITE ONLY and ALL
+                if (this->_runMode_Apply != ALL){
+                    this->_runMode_Apply = APPLY_RANGE(this->_runMode_Apply + 1);                    
                 }  
                 break;
             case CONFIG_SELECT_DELAY:
-                // Decrease delay by 100
+                // increase delay by 100
                 this->_runMode_Delay += 100;               
-                break;            
+                break;
+            case CONFIG_DELAY_DURING_RUN:
+                // increase delay by 100
+                this->_runMode_Delay += 100;               
+                break;   
+            case CONFIG_SELECT_SPECI:
+                // increase delay by 100
+                if (this->_runMode_Select_Speci <= 99999){
+                    this->_runMode_Select_Speci += (int)(pow(10,13-this->_mousePosx)+0.5);               
+                    //Serial.println(this->_mousePosx);
+                    //Serial.println((int)(pow(10,13-this->_mousePosx)));
+                }
+                
+                break; 
+            case CONFIG_SPECI_DURING_RUN:
+                // increase delay by 100
+                if (this->_runMode_Select_Speci <= 99999){
+                    this->_runMode_Select_Speci += (int)(pow(10,13-this->_mousePosx)+0.5);               
+                    //Serial.println(this->_mousePosx);
+                    //Serial.println((int)(pow(10,13-this->_mousePosx)));
+                }
+                
+                break;         
             default:
                 if (this->_mousePos > 0){this->_mousePos--;}
                 break;
@@ -407,7 +517,10 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
         
     }
     
+    //Serial.println(this->_runMode);
+    //Serial.println(this->_runState);
 
+    
     return true;
 }
 
@@ -435,7 +548,8 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
 
     // MODE 
     // if (happy or apply to write only) and not ignore
-    if (((this->_runMode == MODE_HAPPY) || (this->_runMode_Apply != ALL)) && (!this->ignore) && (command_id != 0x20)){
+    if (((this->_runMode == MODE_HAPPY) || 
+        (this->_runMode_Apply != ALL)) && (!this->ignore) && (command_id != 0x20)){
         
             // if found in map    
             if (it != this->CAN_Expedited_Map.end())
@@ -922,8 +1036,10 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
         }
         
         if (this->_runMode == MODE_UNHAPPY){
-            // only apply if UNHAPPY & ALL or UNHAPPY & Write
-            if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40))){
+            // only apply if UNHAPPY & ALL or UNHAPPY & Write or UNHAPPY & Read_Speci & indx_subindx = runmode_select_speci
+            if ((this->_runMode_Apply == ALL) ||
+                (this->_just_Save && (command_id == 0x40)) || 
+                ((this->_runMode_Apply == READ_SPECI) && (command_id == 0x40) && (indx_subindx == this->_runMode_Select_Speci))){
                 to_Return.data0 = 0x00;
                 to_Return.data1 = 0x00;
                 to_Return.data2 = 0x00;
@@ -932,8 +1048,11 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
         } 
 
         if (this->_runMode == MODE_ADT){
-            // only apply if ADT & ALL or ADT & Write_CHECK or ADT & Write_REQ & 20
-            if ((this->_runMode_Apply == ALL) || (this->_just_Save && (command_id == 0x40)) || (this->_runMode_Apply == WRITE_REQ && (command_id == 0x20))){
+            // only apply if ADT & ALL or ADT & READ_CONF or ADT & Write_REQ & 20 or ADT & Read_Speci & indx_subinx = runmode_select_speci
+            if ((this->_runMode_Apply == ALL) || 
+                (this->_just_Save && (command_id == 0x40)) || 
+                (this->_runMode_Apply == WRITE_REQ && (command_id == 0x20)) || 
+                ((this->_runMode_Apply == READ_SPECI) && (command_id == 0x40) && (indx_subindx == this->_runMode_Select_Speci))){
                 to_Return.data0 = 0x11;
                 to_Return.data1 = 0x00;
                 to_Return.data2 = 0x09;
@@ -959,10 +1078,10 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
     __u8 command_id = req_frame.data[0];
     command_id &= 0xf0;
     
-    Serial.println(indx_subindx);
+    //Serial.println(indx_subindx);
         
     // remember Just-Write command
-    if ((this->_runMode_Apply == WRITE_CHECK) && (command_id == 0x20) && (indx_subindx != 5) && (indx_subindx != 20012)){
+    if ((this->_runMode_Apply == READ_CONF) && (command_id == 0x20) && (indx_subindx != 5) && (indx_subindx != 20012)){
         this->_just_Save = true;        
     }
 
@@ -1030,8 +1149,8 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     
                     break;
                 case 48: // write load
-                    Serial.println("Write Load");
-                    Serial.println("Start step 1");    
+                    //Serial.println("Write Load");
+                    //Serial.println("Start step 1");    
 
                     this->loiTruck_Lenken_IstLenkwinkel_Null_0 = this->loiTruck_Lenken_SollLenkwinkel_Null_0;
                     this->loiTruck_Lenken_IstLenkwinkel_Null_1 = this->loiTruck_Lenken_SollLenkwinkel_Null_1;
@@ -1057,7 +1176,7 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     this->_teach_In = true;
                     break;
                 case 47: // write save
-                    Serial.println("Write Save");
+                    //Serial.println("Write Save");
 
                     if (this->loiTruck_lenken_load == true){
                         // not available for teach in                        
@@ -1107,8 +1226,8 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
 
                     
                     this->_count_teach_In = 0;                    
-                    Serial.println("save null");
-                    Serial.println("start step 3");                    
+                    //Serial.println("save null");
+                    //Serial.println("start step 3");                    
                     break;
                 case 50: // save recht                    
                                            
@@ -1125,11 +1244,11 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     //this->loiTruck_Lenken_IstLenkwinkel_Recht_0 = this->loiTruck_Lenken_SollLenkwinkel_Recht_0;
                     //this->loiTruck_Lenken_IstLenkwinkel_Recht_1 = this->loiTruck_Lenken_SollLenkwinkel_Recht_1 - 1;
 
-                    Serial.println("save recht");
+                    //Serial.println("save recht");
                     break;
                 case 49: // save link                    
                     
-                    Serial.println("Start step 2");                    
+                    //Serial.println("Start step 2");                    
                     this->loiTruck_lenken_save_link = true;
                     if ((this->_runMode == MODE_HAPPY) || ((this->_runMode == MODE_UNHAPPY) && (this->_runMode_Apply != WRITE_REQ))){
                         this->loiTruck_Lenken_Soll_Status_0 =  0x22;
@@ -1143,7 +1262,9 @@ bool LOITRUCK::actuator(can_frame req_frame, int indx_subindx, LiquidCrystal_I2C
                     //this->loiTruck_Lenken_IstLenkwinkel_Link_0 = this->loiTruck_Lenken_SollLenkwinkel_Link_0;
                     //this->loiTruck_Lenken_IstLenkwinkel_Link_1 = this->loiTruck_Lenken_SollLenkwinkel_Link_1 - 1;
 
-                    Serial.println("save link");
+                    
+                    
+                    //Serial.println("save link");
                     
                     break;
                 default:
@@ -1246,12 +1367,13 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
     uint8_t neutral[8] = {0x0, 0x11, 0x0, 0x0, 0x1F, 0x0, 0x0};
     uint8_t sad[8] = {0x0, 0x11, 0x0, 0x0E, 0x11, 0x0, 0x0};
     uint8_t angry[8] = {0x0, 0x11, 0x0, 0x0A, 0x15, 0x0, 0x0};
+    uint8_t config[8] = {0x06, 0x06, 0x06, 0x06 , 0x0, 0x06, 0x06};
 
     lcd.createChar(0, smiley);
     lcd.createChar(1, neutral);
     lcd.createChar(2, sad);
-    lcd.createChar(3, angry);
-
+    lcd.createChar(3, angry);   
+    lcd.createChar(4, config);
  
     switch (this->_runState) {
         case STATE_WELCOME:            
@@ -1290,8 +1412,17 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
             }
             break;
         case STATE_RUN:     
-            
+                // only show mouse on MODE_CONFIG
                 lcd.clear();
+                if (this->_runMode == MODE_CONFIG){                    
+                    lcd.setCursor(0, this->_mousePos);
+                    lcd.print("->");
+                    // line 3 quit config
+                    lcd.setCursor(3,3);
+                    lcd.print("Quit Config");    
+                }                
+
+                
                 lcd.setCursor(0,0);
                 strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
                 lcd.print(buffer);lcd.print(" ");
@@ -1307,6 +1438,10 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                         break;
                     case 3: // ignore
                         lcd.write(3); // angry
+                        break;
+                    case 4: // config
+                        lcd.write(4); // config
+                        break;
                     default: 
                         break;
                 }
@@ -1320,11 +1455,14 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                         lcd.print("WRITE_REQ");
                         break;
                     case 1:
-                        lcd.print("WRITE_CHECK");
+                        lcd.print("READ_CONF");
                         break;
                     case 2:
-                        lcd.print("ALL");
+                        lcd.print(this->_runMode_Select_Speci);
                         break;
+                    case 3:
+                        lcd.print("ALL     ");
+                        break;                        
                     default:
                         break;
                 }
@@ -1334,6 +1472,134 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                 lcd.print("Delay:");
                 lcd.setCursor(9,2);
                 lcd.print(this->_runMode_Delay);    
+                                                 
+                break;
+        case CONFIG_DELAY_DURING_RUN:     
+                // only show mouse on MODE_CONFIG
+                lcd.clear();
+                if (this->_runMode == MODE_CONFIG){
+                    
+                    lcd.setCursor(0, this->_mousePos);
+                    lcd.print(" *");
+                }                
+                
+                lcd.setCursor(0,0);
+                strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
+                lcd.print(buffer);lcd.print(" ");
+                switch (this->_runMode) {
+                    case 0: // Happy
+                        lcd.write(0); // smiley
+                        break;
+                    case 1: // ADT
+                        lcd.write(1); // neutral
+                        break;
+                    case 2: // unhappy
+                        lcd.write(2); // sad
+                        break;
+                    case 3: // ignore
+                        lcd.write(3); // angry
+                        break;
+                    case 4: // config
+                        lcd.write(4); // config
+                        break;
+                    default: 
+                        break;
+                }
+
+                // line 1 Range
+                lcd.setCursor(3,1);
+                lcd.print("Range:");
+                lcd.setCursor(9,1);
+                switch (this->_runMode_Apply) {
+                    case 0:
+                        lcd.print("WRITE_REQ");
+                        break;
+                    case 1:
+                        lcd.print("READ_CONF");
+                        break;
+                    case 2:
+                        lcd.print(this->_runMode_Select_Speci);
+                        break;
+                    case 3:
+                        lcd.print("ALL     ");
+                        break;                        
+                    default:
+                        break;
+                }
+                        
+                // line 2 delay
+                lcd.setCursor(3,2);
+                lcd.print("Delay:");
+                lcd.setCursor(9,2);
+                lcd.print(this->_runMode_Delay);    
+
+                // line 3 quit config
+                lcd.setCursor(3,3);
+                lcd.print("Quit Config");                
+                                                 
+                break;
+        case CONFIG_RANGE_DURING_RUN:     
+                // only show mouse on MODE_CONFIG
+                lcd.clear();
+                if (this->_runMode == MODE_CONFIG){
+                    
+                    lcd.setCursor(0, this->_mousePos);
+                    lcd.print(" *");
+                }                
+
+                lcd.setCursor(0,0);
+                strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
+                lcd.print(buffer);lcd.print(" ");
+                switch (this->_runMode) {
+                    case 0: // Happy
+                        lcd.write(0); // smiley
+                        break;
+                    case 1: // ADT
+                        lcd.write(1); // neutral
+                        break;
+                    case 2: // unhappy
+                        lcd.write(2); // sad
+                        break;
+                    case 3: // ignore
+                        lcd.write(3); // angry
+                        break;
+                    case 4: // config
+                        lcd.write(4); // config
+                        break;
+                    default: 
+                        break;
+                }
+
+                // line 1 Range
+                lcd.setCursor(3,1);
+                lcd.print("Range:");
+                lcd.setCursor(9,1);
+                switch (this->_runMode_Apply) {
+                    case 0:
+                        lcd.print("WRITE_REQ");
+                        break;
+                    case 1:
+                        lcd.print("READ_CONF");
+                        break;
+                    case 2:
+                        lcd.print(this->_runMode_Select_Speci);
+                        break;
+                    case 3:
+                        lcd.print("ALL     ");
+                        break;                        
+                    default:
+                        break;
+                }
+                        
+                // line 2 delay
+                lcd.setCursor(3,2);
+                lcd.print("Delay:");
+                lcd.setCursor(9,2);
+                lcd.print(this->_runMode_Delay);    
+
+                // line 3 quit config
+                lcd.setCursor(3,3);
+                lcd.print("Quit Config");                
                                                  
                 break;
         case STATE_DEMO:
@@ -1360,6 +1626,7 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     lcd.print("MODE IGNORE CONFIG");
                     break;
                 default:
+                    lcd.print("CONFIG");
                     break;
             }
             // line 1 Range
@@ -1371,10 +1638,13 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     lcd.print("WRITE_REQ");
                     break;
                 case 1:
-                    lcd.print("WRITE_CHECK");
+                    lcd.print("READ_CONF");
                     break;
                 case 2:
-                    lcd.print("ALL");
+                    lcd.print("READ_SPECI");
+                    break;
+                case 3:
+                    lcd.print("ALL      ");
                     break;
                 default:
                     break;
@@ -1396,10 +1666,13 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                     lcd.print("WRITE_REQ  ");
                     break;
                 case 1:
-                    lcd.print("WRITE_CHECK");
+                    lcd.print("READ_CONF");
                     break;
                 case 2:
-                    lcd.print("ALL        ");
+                    lcd.print("READ_SPECI");
+                    break;
+                case 3:
+                    lcd.print("ALL       ");
                     break;
             }
             // delete cursor
@@ -1414,6 +1687,31 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
             // delete cursor
             lcd.setCursor(0, this->_mousePos);
             lcd.print("  *");                    
+            
+            break;
+
+        case CONFIG_SELECT_SPECI:
+            lcd.setCursor(3,1);
+            lcd.print("COMID");
+
+            lcd.setCursor(9,1);
+            
+            lcd.print(this->_runMode_Select_Speci);lcd.print("         ");
+            // delete cursor
+            lcd.setCursor(this->_mousePosx, this->_mousePos);
+            lcd.blink();                    
+            
+            break;
+        case CONFIG_SPECI_DURING_RUN:
+            lcd.setCursor(3,1);
+            lcd.print("COMID");
+
+            lcd.setCursor(9,1);
+            
+            lcd.print(this->_runMode_Select_Speci);lcd.print("         ");
+            // delete cursor
+            lcd.setCursor(this->_mousePosx, this->_mousePos);
+            lcd.blink();                    
             
             break;
         default:

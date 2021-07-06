@@ -456,12 +456,14 @@ enum RUN_MODE {
     MODE_ADT,   // negativ anwort (0x80)
     //MODE_NORMAL, // 50 50
     MODE_UNHAPPY, // immer falsch
-    MODE_IGNORE // nicht 
+    MODE_IGNORE, // nicht 
+    MODE_CONFIG, // to update delay on the run 
 };
 
 enum APPLY_RANGE {
     WRITE_REQ,
-    WRITE_CHECK,
+    READ_CONF,
+    READ_SPECI,
     ALL,
 };
 
@@ -475,6 +477,10 @@ enum RUN_STATE {
     STATE_CONFIG,       //5
     CONFIG_SELECT_RANGE,//6
     CONFIG_SELECT_DELAY,//7
+    CONFIG_SELECT_SPECI,//8
+    CONFIG_DELAY_DURING_RUN,//9
+    CONFIG_RANGE_DURING_RUN,//10
+    CONFIG_SPECI_DURING_RUN,//11
 };
 
 struct answer {
@@ -494,7 +500,9 @@ public:
     APPLY_RANGE _runMode_Apply;
     int _runMode_Delay;
     int _mousePos;
+    int _mousePosx;
     bool _just_Save;
+    unsigned long _runMode_Select_Speci; // max 65535
     
 
     // For create map
@@ -567,6 +575,8 @@ public:
     __u8 loiTruck_Lenken_Kennlinie;     // 2411 
 
     __u8 loiTruck_Logbuch_SavedIndx;
+
+    
 
     // Lenken status
     // -------to set status 0x0000-------
