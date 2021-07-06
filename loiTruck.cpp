@@ -395,6 +395,7 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
         }
         
     }
+    Serial.println(mapx):
 
     return true;
 }
