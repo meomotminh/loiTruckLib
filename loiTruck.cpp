@@ -351,6 +351,17 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
             default:
                 break;
         }
+    } else if (mapx < -400){
+        // GO FORTH
+        switch (this->_runState)
+        {
+        case CONFIG_SELECT_RANGE:
+            if (this->_runMode_Apply == )
+            break;
+        
+        default:
+            break;
+        }
     }
 
     if (mapy < -100)
@@ -395,7 +406,7 @@ bool LOITRUCK::modify_after_joystick(int mapx, int mapy, int clicked, LiquidCrys
         }
         
     }
-    Serial.println(mapx):
+    
 
     return true;
 }
