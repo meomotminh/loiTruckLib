@@ -72,6 +72,7 @@ Three important objects using in the app
     
 ### Underlying Run Mode Logic
 >CAN Message Classification
+
     - Write Command (Command ID == 0x2_)
     - Read Command (Command ID == 0x4_)
     - Read Confirm (Read Command right after Write Command)
