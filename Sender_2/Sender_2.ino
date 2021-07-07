@@ -59,7 +59,7 @@ void isr(){
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(250000);
 
     // Configure INT1            
     attachInterrupt(digitalPinToInterrupt(2),isr, FALLING);
@@ -180,7 +180,7 @@ void setup()
 
 void loop()
 {                   
-      if ((loiTruck._runState != STATE_RUN) || (flag_Interrupt)){
+      if ((loiTruck._runState != STATE_RUN) || (flag_Interrupt) || (loiTruck._runMode == MODE_CONFIG)){
             xPos = analogRead(VRx);
             yPos = analogRead(VRy);
             
@@ -208,7 +208,7 @@ void loop()
       
       // only read mcp when in run state
 
-      if (loiTruck._runState == STATE_RUN){
+      if ((loiTruck._runState == STATE_RUN) || (loiTruck._runMode == MODE_CONFIG)){
         if ((mcp2515.readMessage(&req) == MCP2515::ERROR_OK)) {
           count++;
 

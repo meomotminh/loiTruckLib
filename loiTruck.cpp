@@ -183,20 +183,30 @@ __u8 LOITRUCK::prepare_Command_ID(can_frame req, bool end_msg, int indx_subindx)
     
     // only in ADT & apply all or ADT & write command
     if (this->_runMode == MODE_ADT){
-        if ((this->_runMode_Apply == ALL) || 
-            ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) || 
-            ((command_ID == 0x40) && (this->_runMode_Apply == READ_SPECI) && (indx_subindx == this->_runMode_Select_Speci)) ){
-            // DELAY FINALLY
-
-            delay(this->_runMode_Delay);                    
-            command_ID = 0x80; // ABORT        
-        } 
-        if ((command_ID == 0x40) && (this->_runMode_Apply == READ_CONF) && this->_just_Save){
-            delay(this->_runMode_Delay);   
-            command_ID = 0x80; // ABORT    
-            this->_just_Save = false;              
-        }  
+            if (
+                (this->_runMode_Apply == ALL) || 
+                ( (command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ) ) || 
+                ( (command_ID == 0x40) && (this->_runMode_Apply == READ_SPECI) && (indx_subindx == this->_runMode_Select_Speci) ) ||
+                ( (command_ID == 0x40) && (this->_runMode_Apply == READ_CONF) && this->_just_Save )            
+            ){
+                command_ID = 0x80; // ABORT        
+            }           
     }      
+
+    // DELAY OR NOT
+    if (!this->_just_Save){
+        if ((this->_runMode_Apply == ALL) || 
+           ((command_ID == 0x20) && (this->_runMode_Apply == WRITE_REQ)) || 
+           ((command_ID == 0x40) && (this->_runMode_Apply == READ_SPECI) && (indx_subindx == this->_runMode_Select_Speci)) ){
+                delay(this->_runMode_Delay);     
+        }
+    } else {
+        if ((command_ID == 0x40) && (this->_runMode_Apply == READ_CONF)){
+                delay(this->_runMode_Delay);               
+                this->_just_Save = false;              
+        }
+    }
+    
 
     // IGNORE or NOT
     if (this->_runMode == MODE_IGNORE){
@@ -535,7 +545,7 @@ answer LOITRUCK::prepare_Answer(can_frame req, int indx_subindx, LiquidCrystal_I
 
     __u8 command_id = req.data[0] & 0xf0;
 
-    //Serial.println(indx_subindx);
+    Serial.println(indx_subindx);
     
     // DEFAULT VALUE
     to_Return.data0 = 0x00;
