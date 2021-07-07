@@ -68,7 +68,7 @@ Three important objects using in the app
 - mcp2515
 - lcd
 - loiTruck
-   ![](loiTruck_obj.PNG)
+    - ![](loiTruck_obj.PNG)
     
 ### Underlying Run Mode Logic
 >CAN Message Classification
