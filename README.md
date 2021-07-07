@@ -68,16 +68,17 @@ Three important objects using in the app
 - mcp2515
 - lcd
 - loiTruck
-    - ![](loiTruck_obj.PNG)
+    
+    ![](loiTruck_obj.PNG)
     
 ### Underlying Run Mode Logic
 >CAN Message Classification
 
-    - Write Command (Command ID == 0x2_)
-    - Read Command (Command ID == 0x4_)
-    - Read Confirm (Read Command right after Write Command)
-    - Read Speci (Command ID == 0x4_ and Indx_Subindx == Selected Indx_Subindx)
-        - Indx_Subindx = Byte_3 (reversed) + Byte_4 (exp: 0x20021) 
+    -   Write Command (Command ID == 0x2_)
+    -   Read Command (Command ID == 0x4_)
+    -   Read Confirm (Read Command right after Write Command)
+    -   Read Speci (Command ID == 0x4_ and Indx_Subindx == Selected Indx_Subindx)
+        -   Indx_Subindx = Byte_3 (reversed) + Byte_4 (exp: 0x20021) 
 
 >MODE HAPPY (default Mode)
 
