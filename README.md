@@ -10,10 +10,12 @@
     - MODE ADT
     - MODE UNHAPPY
     - MODE IGNORE
+    - MODE CONFIG (for modification during RUN)
 - In combination with those Modes, Range and Delay enable users to simulate errors more freely:
     - Range:
-        - WRITE-REQ
-        - WRITE-CHECK
+        - WRITE_REQ
+        - READ_CONF
+        - READ_SPECI
         - ALL
     - Delay:
         - 0 - 2 mil (integer upper boundary, step 100ms)
