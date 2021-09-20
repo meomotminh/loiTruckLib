@@ -1454,6 +1454,7 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                 }                
 
                 
+<<<<<<< HEAD
                 lcd.setCursor(0,0);
                 strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
                 lcd.print(buffer);lcd.print(" ");
@@ -1503,6 +1504,136 @@ bool LOITRUCK::display_LCD(LiquidCrystal_I2C lcd)
                 lcd.print("Delay:");
                 lcd.setCursor(9,2);
                 lcd.print(this->_runMode_Delay);    
+                                                 
+                break;
+        case CONFIG_DELAY_DURING_RUN:     
+                // only show mouse on MODE_CONFIG
+                lcd.clear();
+                if (this->_runMode == MODE_CONFIG){
+                    
+                    lcd.setCursor(0, this->_mousePos);
+                    lcd.print(" *");
+                }                
+                
+                lcd.setCursor(0,0);
+                strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
+                lcd.print(buffer);lcd.print(" ");
+                switch (this->_runMode) {
+                    case 0: // Happy
+                        lcd.write(0); // smiley
+                        break;
+                    case 1: // ADT
+                        lcd.write(1); // neutral
+                        break;
+                    case 2: // unhappy
+                        lcd.write(2); // sad
+                        break;
+                    case 3: // ignore
+                        lcd.write(3); // angry
+                        break;
+                    case 4: // config
+                        lcd.write(4); // config
+                        break;
+                    default: 
+                        break;
+                }
+
+                // line 1 Range
+                lcd.setCursor(3,1);
+                lcd.print("Range:");
+                lcd.setCursor(9,1);
+                switch (this->_runMode_Apply) {
+                    case 0:
+                        lcd.print("WRITE_REQ");
+                        break;
+                    case 1:
+                        lcd.print("READ_CONF");
+                        break;
+                    case 2:
+                        lcd.print(this->_runMode_Select_Speci);
+                        break;
+                    case 3:
+                        lcd.print("ALL     ");
+                        break;                        
+                    default:
+                        break;
+                }
+                        
+                // line 2 delay
+                lcd.setCursor(3,2);
+                lcd.print("Delay:");
+                lcd.setCursor(9,2);
+                lcd.print(this->_runMode_Delay);    
+
+                // line 3 quit config
+                lcd.setCursor(3,3);
+                lcd.print("Quit Config");                
+                                                 
+                break;
+        case CONFIG_RANGE_DURING_RUN:     
+                // only show mouse on MODE_CONFIG
+                lcd.clear();
+                if (this->_runMode == MODE_CONFIG){
+                    
+                    lcd.setCursor(0, this->_mousePos);
+                    lcd.print(" *");
+                }                
+
+=======
+>>>>>>> ec516bdb8ca06f5b2a58a772648e21059ec91dd4
+                lcd.setCursor(0,0);
+                strcpy_P(buffer, (char *)pgm_read_word(&(string_table[this->selected_Truck])));
+                lcd.print(buffer);lcd.print(" ");
+                switch (this->_runMode) {
+                    case 0: // Happy
+                        lcd.write(0); // smiley
+                        break;
+                    case 1: // ADT
+                        lcd.write(1); // neutral
+                        break;
+                    case 2: // unhappy
+                        lcd.write(2); // sad
+                        break;
+                    case 3: // ignore
+                        lcd.write(3); // angry
+                        break;
+                    case 4: // config
+                        lcd.write(4); // config
+                        break;
+                    default: 
+                        break;
+                }
+
+                // line 1 Range
+                lcd.setCursor(3,1);
+                lcd.print("Range:");
+                lcd.setCursor(9,1);
+                switch (this->_runMode_Apply) {
+                    case 0:
+                        lcd.print("WRITE_REQ");
+                        break;
+                    case 1:
+                        lcd.print("READ_CONF");
+                        break;
+                    case 2:
+                        lcd.print(this->_runMode_Select_Speci);
+                        break;
+                    case 3:
+                        lcd.print("ALL     ");
+                        break;                        
+                    default:
+                        break;
+                }
+                        
+                // line 2 delay
+                lcd.setCursor(3,2);
+                lcd.print("Delay:");
+                lcd.setCursor(9,2);
+                lcd.print(this->_runMode_Delay);    
+
+                // line 3 quit config
+                lcd.setCursor(3,3);
+                lcd.print("Quit Config");                
                                                  
                 break;
         case CONFIG_DELAY_DURING_RUN:     
